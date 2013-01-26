@@ -1,15 +1,17 @@
 Changes
 dbc_passwd
 dbc_realm
+db_connector.cfg
 lib/NHGRI/Db/Connector.pm
 Makefile.PL
 MANIFEST
+MANIFEST.SKIP
 META.yml			Module meta-data (added by MakeMaker)
 #pquery.plx
 README
-samples/msql
 samples/mysql
 samples/oracle
+samples/sqlite
 samples/sybase
 t/dbc_passwd.t
 t/dbc_realm.t
