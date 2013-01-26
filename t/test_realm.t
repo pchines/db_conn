@@ -70,7 +70,7 @@ $dbh2->disconnect();
 ok !$dbh2->ping();
 $dbh=$dbc2->connect();
 ok $dbh->{Active}, 1, 'should automatically reconnect';
-ok $dbh->ping(), 1, 'means same thing';
+ok $dbh->ping();
 
 # Test time suffixes
 my $sec = NHGRI::Db::Connector::_time_to_sec('23 sec');

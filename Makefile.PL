@@ -8,9 +8,9 @@ use lib 'lib';
 use NHGRI::Db::Connector qw(ask ask_pass);
 use File::Spec;
 
-$main::MODULE_FILE = 'lib/NHGRI::Db/Connector.pm';
-$main::CONFIG_LOCAL = 'dbix_connector.cfg';
-$main::CONFIG_PATH  = '/usr/local/etc/dbix_connector.cfg';
+$main::MODULE_FILE = 'lib/NHGRI/Db/Connector.pm';
+$main::CONFIG_LOCAL = 'db_connector.cfg';
+$main::CONFIG_PATH  = '/usr/local/etc/db_connector.cfg';
 $main::TEST_REALM_FILE = './test';
 $main::TEST_REALM_LIVE = $main::TEST_REALM_FILE . ".live";
 $main::SH_REGEX = q{^(\s*\$SHARED_CONNECTION_DIR\s*=\s*)'(.*?)'\s*;\s*$};

@@ -34,7 +34,7 @@ if ($ENV{'DBC_CONFIG_FILE'}) {
     do "$ENV{'DBC_CONFIG_FILE'}";
 }
 else {
-    do '/usr/local/gtb/etc/dbix_connector.cfg';
+    do '/usr/local/etc/db_connector.cfg';
 }
 if ($ENV{'HOME'} && $PRIVATE_SUBDIR_IN_HOME) {
     $PRIVATE_CONNECTION_DIR = File::Spec->join($ENV{'HOME'},
@@ -307,8 +307,8 @@ sub find_realm_file {
     if ($filename && -e $filename) {
         return $filename;
     }
-    $msg .= $filename ? "no private realm dir,"
-                      : "private realm '$filename', nor";
+    $msg .= $filename ? "private realm '$filename', nor"
+                      : "no private realm dir,";
 
     # Then try shared dir
     $filename = $self->_get_shared_realm_file($realm);
