@@ -1,0 +1,21 @@
+Changes
+dbc_passwd
+dbc_realm
+lib/DBIx/Connector.pm
+Makefile.PL
+MANIFEST
+META.yml			Module meta-data (added by MakeMaker)
+#pquery.plx
+README
+samples/msql
+samples/mysql
+samples/oracle
+samples/sybase
+t/dbc_passwd.t
+t/dbc_realm.t
+t/disconnect.t
+#t/pquery.t
+t/test_data.txt
+t/test_realm.t
+t/write.t
+TODO

@@ -1,0 +1,5 @@
+DBD=mysql
+SERVER=
+USER=username
+PASS=mypassword
+DATABASE=mydb

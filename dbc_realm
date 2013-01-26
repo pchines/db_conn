@@ -1,0 +1,454 @@
+#!/usr/bin/perl -w
+# $Id: dbc_realm,v 1.17 2009/12/24 20:12:59 pchines Exp $
+
+=head1 NAME
+
+dbc_realm - create or edit DBIx::Connector database realm file
+
+=head1 SYNOPSIS
+
+To interactively create a private (or shared) realm file:
+
+    dbc_realm [--shared] [realm_name]
+
+To use non-interactively (--quiet option):
+
+    dbc_realm -q -from old_realm --user login --pass pw new_realm
+
+To list all available private (or shared) realms:
+
+    dbc_realm [--shared] --list
+
+To test whether connection to database really works:
+
+    dbc_realm --check [realm_name]
+
+To remove private (or shared) realm file:
+
+    dbc_realm --delete [--shared] [realm_name]
+
+=head1 DESCRIPTION
+
+This script allows a user to create or update a DBIx::Connector realm file,
+to list existing realm files, and to check whether a realm file can
+succesfully connect to a database.
+
+See L<DBIx::Connector> for more information about realm files.
+
+Using this script is more convenient than editing realms file by hand
+because it knows the directories where the files are stored and intelligently
+selects default values.  The method for selecting the defaults is as follows:
+
+=over 4
+
+=item 1.
+
+If a C<--from> realm is specified, it is used to supply the default values.
+
+=item 2.
+
+Otherwise, if the destination realm exists, its current values will be the
+defaults.
+
+=item 3.
+
+Otherwise, if a shared realm by the same name exists, its values will be
+used as defaults for the corresponding private realm.
+
+=item 4.
+
+Otherwise, if a private or shared 'default' realm exists, it will be used to
+supply the defaults.
+
+=back
+
+=cut
+
+use strict;
+use Getopt::Long;
+use Pod::Usage;
+use File::Spec;
+use DBIx::Connector qw(ask ask_pass);
+use vars qw(%Opt $RH_REALM_PARAMS);
+
+######### BEGIN MAIN PROGRAM #########
+
+get_commandline_options();
+if ($Opt{list}) {
+    list_realm_files();
+}
+elsif ($Opt{check}) {
+    get_realm("check");
+    check_realm();
+}
+elsif ($Opt{delete}) {
+    get_realm("delete");
+    delete_realm();
+}
+else {
+    get_realm("create");
+    write_new_realm("test only");
+    choose_source_realm();
+    review_parameters();
+    if (write_new_realm()) {
+        print "Successfully wrote '$Opt{realm}' realm file.\n" if !$Opt{quiet};
+    }
+    if (!defined $Opt{check}) {
+        check_realm();
+    }
+}
+
+######### END OF MAIN PROGRAM #########
+
+sub get_commandline_options {
+    $Opt{quiet} = 0;
+    GetOptions(\%Opt, qw(check! database=s dbd=s delete dir=s
+                from=s list password=s
+                quiet+ realm=s server|s=s shared tab:s username|u=s
+                help+ manual usage version)) || pod2usage(1);
+    pod2usage(verbose => 2) if $Opt{manual};
+    pod2usage(verbose => $Opt{help}) if $Opt{help};
+    pod2usage(verbose => 0) if $Opt{usage};
+    if ($Opt{version}) {
+        die "dbc_realm, ", q$Revision: 1.17 $,
+            "(part of DBIx::Connector release $DBIx::Connector::VERSION)\n";
+    }
+    # Destination realm is set with --realm option or 1st arg, but not both
+    if (@ARGV == 1 && !$Opt{realm}) {
+        $Opt{realm} = $ARGV[0];
+    }
+    elsif (@ARGV) {
+        pod2usage(1);
+    }
+    if (defined $Opt{tab}) {
+        $Opt{tab} ||= "\t";
+    }
+}
+
+sub _dir {
+    # Source dir is explicit, shared (if --share specified), private,
+    # or shared (if no private directory is defined)
+    my $dir = $Opt{dir};
+    if (!$Opt{shared}) {
+        $dir ||= $DBIx::Connector::PRIVATE_CONNECTION_DIR;
+    }
+    $dir ||= $DBIx::Connector::SHARED_CONNECTION_DIR;
+    return $dir;
+}
+
+sub _type {
+    my $type = "private";
+    if ($Opt{dir}) {
+        $type = "custom";
+    }
+    elsif ($Opt{shared}) {
+        $type = "shared";
+    }
+    return $type;
+}
+
+sub list_realm_files {
+    my $dir = _dir();
+    opendir RDIR, $dir || die "Can't get directory listing from '$dir'\n";
+    my @realms = sort grep { !/^\.\.?$/ } readdir(RDIR);
+    my $fmt = "%-16s% -7s %-28s %-15s %-10s\n";
+    if ($Opt{tab}) {
+        $fmt = join($Opt{tab},("%s") x 5) . "\n";
+    }
+    if (@realms) {
+        printf $fmt, qw(Realm DBD Server Database Username);
+        for my $r (@realms) {
+            my $file = File::Spec->join($dir, $r);
+            my $rh = { SERVER => "[unreadable]" };
+            if (-r $file) {
+                $rh = DBIx::Connector->read_realm_file(filename => $file);
+            }
+            printf $fmt, $r, map { $rh->{$_}||"" }
+                qw(DBD SERVER DATABASE USER);
+        }
+    }
+    else {
+        my $type = _type();
+        warn "No $type realm files found.\n";
+        exit 1;
+    }
+}
+
+sub delete_realm {
+    my $dir = _dir();
+    my $type = _type();
+    my $file = File::Spec->join($dir, $Opt{realm});
+    if (!-e $file) {
+        die "Realm file '$file' does not exist.\n";
+    }
+    elsif (!-w $file) {
+        die "You do not have permission to write to realm file '$file'.\n";
+    }
+    elsif (!-w $dir) {
+        die "You do not have permission to write to directory '$dir'.\n";
+    }
+    if ($Opt{quiet} < 1) {
+        print "Found realm file $file\n";
+    }
+    if ($Opt{quiet} < 2) {
+        my $ok = ask(
+            "Are you sure you want to delete the $type realm '$Opt{realm}'?",
+            "no");
+        if ($ok !~ /^y/i) {
+            die "Aborted at user request.\n";
+        }
+    }
+    unlink $file or die "Error removing realm file: $!\n";
+    if ($Opt{quiet} < 2) {
+        print "Successfully removed $type realm '$Opt{realm}'.\n";
+    }
+}
+
+sub check_realm {
+    my $dir = $Opt{dir};
+    if ($Opt{shared}) {
+        $dir ||= $DBIx::Connector::SHARED_CONNECTION_DIR;
+    }
+    eval {
+        # Silence PrintError warning
+        local $SIG{__WARN__} = sub {};
+        my $dbc = DBIx::Connector->new(max_wait => 0,
+                realm => $Opt{realm}, connection_dir => $dir);
+        my $file = $dbc->find_realm_file();
+        if ($Opt{quiet} < 2) {
+            print "Read realm '$Opt{realm}' from file '$file'...\n";
+        }
+        $dbc->connect();
+        if ($Opt{quiet} < 2) {
+            print "Connected successfully.\n"
+        }
+    };
+    if ($@) {
+        if ($Opt{quiet} < 2) {
+            my $msg = $@;
+            $msg =~ s/ at \S*DBIx\/Connector\.pm line \d+//g;
+            warn $msg;
+        }
+        exit 2;
+    }
+}
+
+sub get_realm {
+    my ($verb) = @_;
+    if (!$Opt{quiet}) {
+        if ($verb ne "check") {
+            my $ing = $verb;
+            $ing =~ s/e?$/ing/;
+            substr($ing,0,1) = uc(substr($ing,0,1));
+            my $type = _type();
+            print "$ing a $type realm file...\n";
+        }
+        $Opt{realm} = ask("Realm to $verb:", $Opt{realm});
+        $Opt{realm} =~ s/^\s+//;
+        $Opt{realm} =~ s/\s+$//;
+    }
+    die "No realm specified.  Aborting.\n" if !$Opt{realm};
+}
+
+sub choose_source_realm {
+    # Source dir is explicit, shared, or automatically determined
+    my $dir = $Opt{dir};
+    if ($Opt{shared}) {
+        $dir ||= $DBIx::Connector::SHARED_CONNECTION_DIR;
+    }
+    # Determine realm to use
+    my $source;
+    if ($Opt{from}) {
+        $source = $Opt{from};
+    }
+    else {
+        foreach my $realm ($Opt{realm}, 'default') {
+            next if !$realm;
+            eval {
+                DBIx::Connector->new(
+                    -realm => $realm,
+                    -connection_dir => $dir,
+                );
+            };
+            if (!$@) {
+                $source = $realm;
+                last;
+            }
+        }
+    }
+    if ($source) {
+        my $dbc = DBIx::Connector->new(
+            -realm => $source,
+            -connection_dir => $dir,
+        );
+        $RH_REALM_PARAMS = $dbc->read_realm_file();
+    }
+    else {
+        my $msg;
+        if ($Opt{realm} && $Opt{realm} ne 'default') {
+            $msg = "Neither '$Opt{realm}' nor 'default' realm was found\n";
+        }
+        else {
+            $msg = "Realm 'default' not found ";
+        }
+        $msg .= "in '$dir'" if $dir;
+        warn "$msg.\n";
+        warn "Thus, there are no default values; "
+            . "for defaults, supply --from source_realm\n";
+        $RH_REALM_PARAMS = {};
+    }
+}
+
+sub review_parameters {
+    $Opt{dbd}      ||= $RH_REALM_PARAMS->{'DBD'};
+    $Opt{server}   ||= $RH_REALM_PARAMS->{'SERVER'};
+    $Opt{username} ||= $RH_REALM_PARAMS->{'USER'};
+    $Opt{password} ||= $RH_REALM_PARAMS->{'PASS'};
+    $Opt{database} ||= $RH_REALM_PARAMS->{'DATABASE'};
+    return if $Opt{quiet};
+
+    $Opt{dbd}      = ask("DBD driver:", $Opt{dbd});
+    $Opt{server}   = ask("SERVER connect string:", $Opt{server});
+    $Opt{username} = ask("USER name for database login:", $Opt{username});
+    $Opt{password} = ask_pass("PASS word for database login:", $Opt{password});
+    $Opt{database} = ask("DATABASE to use:", $Opt{database});
+}
+
+sub write_new_realm {
+    my ($test) = @_;
+    my $dir = _dir();
+    if (!-e $dir) {
+        mkdir($dir, 0700) || die "Can't create directory '$dir', $!\n";
+    }
+    if (!-d $dir) {
+        die "'$dir' is not a directory.\n";
+    }
+    my $file = File::Spec->join($dir, $Opt{realm});
+    if (-e $file) {
+        if (!-w $file) {
+            die "You do not have permission to modify '$file'.\n";
+        }
+    }
+    elsif (!-w $dir) {
+        die "You do not have permission to write to '$dir'.\n";
+    }
+    return $test if $test;
+
+    my $success = DBIx::Connector->write_realm_file(
+        FILENAME=> $file,
+        DBD     => $Opt{dbd},
+        SERVER  => $Opt{server},
+        USER    => $Opt{username},
+        PASS    => $Opt{password},
+        DATABASE=> $Opt{database},
+    );
+    return $success;
+}
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--check> | B<--nocheck>
+
+When the C<--check> option is provided, the specified realm is tested, to see
+whether a successful database connection can be made.  This test is done
+automatically after each change to a realm file, unless the C<--nocheck>
+option is provided.
+
+=item B<--database> database
+
+The database to use after logging into the database server.  Some database
+servers can support several different databases using the same database
+engine.  This parameter allows you to select which of the available databases
+to use.  If you specify a database, a C<use database> command will be issued.
+Some databases do not support the C<use> command; for these databases, you
+must select the database to use by means of the server connection string.
+See the manual pages for your DBD driver for more information.  This
+parameter can be left blank.
+
+=item B<--dbd> DBD
+
+The database-dependent driver to use.  The name is case-sensitive and must
+exactly match one of the DBD drivers installed on your machine.  This
+parameter can never be left blank.
+
+=item B<--delete>
+
+Deletes the specified realm file.
+
+=item B<--dir> /alt/connection/dir
+
+Alternate connection directory to use, rather than using the default shared
+and private directories.
+
+=item B<--from> realm_name
+
+Use the specified realm to obtain the default values, rather than following 
+the usual heuristic approach.
+
+=item B<--list>
+
+List available realms.  Will list private realms unless C<--shared> or
+C<--dir> option is provided.
+
+=item B<--pass> password
+
+The password that goes with the specified username.  May be left blank if
+your database does not require a password, but most do require one.
+
+=item B<--quiet>
+
+When C<--quiet> is specified once, script will run non-interactively.
+Default values will be used except where overridden on the command line.
+When C<--quiet> is specified twice, the script will produce no output except
+error messages; a return value will indicate success or failure.
+
+=item B<--realm> realm_name
+
+The database realm to use; the default is 'default'.
+
+=item B<--server> Server
+
+The server connection string.  The format of this string is dependent on the
+DBD driver used.  It can even be left blank, if not required by your DBD.
+
+=item B<--shared>
+
+If specified, a shared realm file is created.  Otherwise, the default is to
+create a private realm file.
+
+=item B<--tab> [delimiter]
+
+Creates output from C<--list> in delimited form, rather than default
+fixed-width.  If no delimiter is specified, a tab character is used.
+
+=item B<--user> username
+
+The username used to login to the database server.  May be left blank if your
+database does not require a username, but most do.
+
+=item B<--usage>
+
+=item B<--help>
+
+=item B<--man>
+
+Provide increasingly detailed documentation.
+
+=back
+
+=head1 AUTHOR
+
+ Peter S. Chines - pchines@verizon.net
+
+=head1 COPYING
+
+Copyright (c)2002-2006, Peter S. Chines.  You may use, modify, and distribute
+this software under the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+L<DBIx::Connector>
+
+=cut

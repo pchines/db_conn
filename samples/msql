@@ -1,0 +1,5 @@
+DBD=mSQL
+SERVER=
+USER=username
+PASS=password
+DATABASE=www

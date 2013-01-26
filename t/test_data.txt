@@ -1,0 +1,4 @@
+# list of traits for testing list replacement
+bmi
+hdl
+ldl

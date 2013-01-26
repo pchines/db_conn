@@ -1,0 +1,208 @@
+#!/usr/bin/perl -w
+# $Id: dbc_passwd,v 1.15 2009/12/24 20:12:59 pchines Exp $
+
+=head1 NAME
+
+dbc_passwd - set password for DBIx::Connector database realm
+
+=head1 SYNOPSIS
+
+To set the password for the 'default' database realm:
+
+    dbc_passwd
+
+To set the password for a different database realm:
+
+    dbc_passwd realm_name
+
+=head1 DESCRIPTION
+
+This script allows a user to change his or her own database password,
+including changing the DBIx::Connector realm file.  This is much more
+convenient than logging into the database with a SQL monitor, remembering the
+syntax to make the change, then updating the realm file manually.
+
+=cut
+
+use strict;
+use Getopt::Long;
+use Pod::Usage;
+use File::Spec;
+use DBIx::Connector qw(ask_pass);
+use vars qw(%Opt $DBC $RH_REALM_PARAMS);
+
+######### BEGIN MAIN PROGRAM #########
+
+get_commandline_options();
+test_realm();
+
+my $user = $RH_REALM_PARAMS->{'USER'};
+print "Setting password for database user '$user'\n";
+my $old  = ask_pass("Old database password: ");
+if ($old ne $RH_REALM_PARAMS->{'PASS'}) {
+    die "Password does not match password in realm file.\n";
+}
+my $new  = ask_pass("New database password: ");
+my $new2 = ask_pass("  Repeat new password: ");
+if ($new ne $new2) {
+    die "New password entered two different ways; aborting.\n";
+}
+
+if (change_password($user,$old,$new)) {
+    print "\nDatabase password successfully set.\n";
+    if ($DBC->write_realm_file(%$RH_REALM_PARAMS,
+            SHARED  => $Opt{shared},
+            PASS    => $new,
+            )) {
+        print "Realm file successfully updated.\n";
+    }
+    else {
+        # probably won't ever get here, because write_realm_file() dies
+        # on error, but just in case behavior changes
+        die "WARNING: Realm file was not updated!\n";
+    }
+}
+
+######### END OF MAIN PROGRAM #########
+
+sub get_commandline_options {
+    GetOptions(\%Opt, qw(dir=s help man realm=s shared usage version)
+        ) || pod2usage(1);
+    if ($Opt{man}) {
+        pod2usage(verbose => 2);
+    }
+    elsif ($Opt{help}) {
+        pod2usage(verbose => 1);
+    }
+    elsif ($Opt{usage}) {
+        pod2usage(verbose => 0);
+    }
+    if ($Opt{version}) {
+        die "dbc_passwd, ", q$Revision: 1.15 $,
+            "(part of DBIx::Connector release $DBIx::Connector::VERSION)\n";
+    }
+
+    # Realm name comes from --realm option or first argument, but not both
+    if (@ARGV == 1 && !$Opt{realm}) {
+        $Opt{realm} = $ARGV[0];
+    }
+    elsif (@ARGV) {
+        pod2usage(1);
+    }
+    $Opt{realm} ||= "default";
+
+    $Opt{dir} ||= $DBIx::Connector::SHARED_CONNECTION_DIR if $Opt{shared};
+    $Opt{shared} = 1 if $Opt{dir};
+    print "Using '$Opt{realm}' database realm\n";
+    $DBC = DBIx::Connector->new(
+        -realm          => $Opt{realm},
+        -connection_dir => $Opt{dir},
+        -max_wait       => 0,
+        -dbi_options    => {
+            PrintError => 0,
+            RaiseError => 1,
+            AutoCommit => 1,
+            },
+    );
+    $RH_REALM_PARAMS = $DBC->read_realm_file();
+}
+
+sub test_realm {
+    # Make sure realm file actually works
+    eval {
+        $DBC->connect();
+    };
+    if ($@) {
+        die "Cannot connect to database using this realm.\n"
+            ."You must fix the realm file before using this program.\n";
+    }
+    # Make sure that user can really re-write the file
+    my $realm_file = $DBC->find_realm_file();
+    my (undef,$dir,undef) = File::Spec->splitpath($realm_file);
+    if (! -w $dir) {
+        die << "ERROR";
+You do not have permission to write to the connection directory, and so
+cannot update the realm file.  To avoid rendering the realm file useless,
+you are also prevented from changing the password with this script.  Please
+fix the permissions on directory '$dir' and try again.
+
+ERROR
+    }
+}
+
+sub change_password {
+    my ($user, $old, $new) = @_;
+    my $dbh = $DBC->connect();
+    my $qold = $dbh->quote($old);
+    my $qnew = $dbh->quote($new);
+    my $sql;
+    my $dbd = $RH_REALM_PARAMS->{'DBD'};
+    if ($dbd eq 'Sybase') {
+        $sql = "exec sp_password $qold, $qnew\n";
+    }
+    elsif ($dbd eq 'Oracle') {  # don't use standard quoting
+        $sql = qq{alter user $user identified by "$new"\n};
+    }
+    elsif ($dbd eq 'Pg') {
+        $sql = "alter user $user password $qnew\n";
+    }
+    elsif ($dbd eq 'mysql') {
+        $sql = "set password = password($qnew)\n";
+    }
+    else {
+        die "I don't know the command to change password in '$dbd'\n";
+    }
+    if ($dbh->do($sql)) {
+        return 1;
+    }
+    warn "Failed to change password.  SQL Error was:\n";
+    warn $dbh->errstr();
+    return 0;
+}
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--realm> realm_name
+
+The database realm to use; default is 'default'.  In order to use this realm
+successfully, there should be a valid, working DBIx::Connector realm file in
+the users' private connection directory (typically, ~/.db_connections), named
+the same as the realm.  See L<DBIx::Connector> for more information about
+realm files, and L<dbc_realm> for assistance with creating or updating
+one.
+
+=item B<--shared>
+
+Set the password for the account in the shared realm file,
+even if a private realm file by the same name exists.
+
+=item B<--dir> /alternate/connection/dir
+
+Specify an alternate connection directory to look for realm files.
+
+=item B<--usage>
+
+=item B<--help>
+
+=item B<--man>
+
+Provide increasingly detailed documentation.
+
+=back
+
+=head1 AUTHOR
+
+ Peter S. Chines - pchines@verizon.net
+
+=head1 COPYING
+
+Copyright (c)2002-2006, Peter S. Chines.  You may use, modify, and distribute
+this software under the same terms as Perl itself.
+
+=head1 SEE ALSO
+
+L<DBIx::Connector>, L<dbc_realm>
+
+=cut

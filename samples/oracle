@@ -1,0 +1,5 @@
+DBD=Oracle
+SERVER=ORANISC
+USER=username
+PASS=password
+DATABASE=

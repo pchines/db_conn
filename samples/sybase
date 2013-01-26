@@ -1,0 +1,5 @@
+DBD=Sybase
+SERVER=SYBASE
+USER=username
+PASS=password
+DATABASE=pubs2
