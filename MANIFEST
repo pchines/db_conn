@@ -20,4 +20,5 @@ t/disconnect.t
 t/test_data.txt
 t/test_realm.t
 t/write.t
+test                # realm file for testing
 TODO
