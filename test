@@ -1,0 +1,5 @@
+DBD=SQLite
+SERVER=dbname=t/test.db
+USER=
+PASS=
+DATABASE=

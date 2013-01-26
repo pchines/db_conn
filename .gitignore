@@ -4,5 +4,5 @@ Makefile.old
 blib
 dbixinsert.pl
 pm_to_blib
-test
-test-mysql
+NHGRI-Db-Connector-*
+*.bak

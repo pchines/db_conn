@@ -1,12 +1,11 @@
 Changes
+db_connector.cfg
 dbc_passwd
 dbc_realm
-db_connector.cfg
 lib/NHGRI/Db/Connector.pm
-Makefile.PL
 MANIFEST
 MANIFEST.SKIP
-META.yml			Module meta-data (added by MakeMaker)
+Makefile.PL
 #pquery.plx
 README
 samples/mysql
@@ -20,5 +19,5 @@ t/disconnect.t
 t/test_data.txt
 t/test_realm.t
 t/write.t
-test                # realm file for testing
+test
 TODO
