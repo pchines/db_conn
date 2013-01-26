@@ -1,0 +1,5 @@
+DBD=SQLite
+SERVER=dbname=/full/path/to/sqlite.db
+USER= 
+PASS= 
+DATABASE=
