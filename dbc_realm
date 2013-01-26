@@ -3,7 +3,7 @@
 
 =head1 NAME
 
-dbc_realm - create or edit DBIx::Connector database realm file
+dbc_realm - create or edit NHGRI::Db::Connector database realm file
 
 =head1 SYNOPSIS
 
@@ -29,11 +29,11 @@ To remove private (or shared) realm file:
 
 =head1 DESCRIPTION
 
-This script allows a user to create or update a DBIx::Connector realm file,
+This script allows a user to create or update a NHGRI::Db::Connector realm file,
 to list existing realm files, and to check whether a realm file can
 succesfully connect to a database.
 
-See L<DBIx::Connector> for more information about realm files.
+See L<NHGRI::Db::Connector> for more information about realm files.
 
 Using this script is more convenient than editing realms file by hand
 because it knows the directories where the files are stored and intelligently
@@ -68,7 +68,7 @@ use strict;
 use Getopt::Long;
 use Pod::Usage;
 use File::Spec;
-use DBIx::Connector qw(ask ask_pass);
+use NHGRI::Db::Connector qw(ask ask_pass);
 use vars qw(%Opt $RH_REALM_PARAMS);
 
 ######### BEGIN MAIN PROGRAM #########
@@ -111,7 +111,7 @@ sub get_commandline_options {
     pod2usage(verbose => 0) if $Opt{usage};
     if ($Opt{version}) {
         die "dbc_realm, ", q$Revision: 1.17 $,
-            "(part of DBIx::Connector release $DBIx::Connector::VERSION)\n";
+            "(part of NHGRI::Db::Connector release $NHGRI::Db::Connector::VERSION)\n";
     }
     # Destination realm is set with --realm option or 1st arg, but not both
     if (@ARGV == 1 && !$Opt{realm}) {
@@ -130,9 +130,9 @@ sub _dir {
     # or shared (if no private directory is defined)
     my $dir = $Opt{dir};
     if (!$Opt{shared}) {
-        $dir ||= $DBIx::Connector::PRIVATE_CONNECTION_DIR;
+        $dir ||= $NHGRI::Db::Connector::PRIVATE_CONNECTION_DIR;
     }
-    $dir ||= $DBIx::Connector::SHARED_CONNECTION_DIR;
+    $dir ||= $NHGRI::Db::Connector::SHARED_CONNECTION_DIR;
     return $dir;
 }
 
@@ -161,7 +161,7 @@ sub list_realm_files {
             my $file = File::Spec->join($dir, $r);
             my $rh = { SERVER => "[unreadable]" };
             if (-r $file) {
-                $rh = DBIx::Connector->read_realm_file(filename => $file);
+                $rh = NHGRI::Db::Connector->read_realm_file(filename => $file);
             }
             printf $fmt, $r, map { $rh->{$_}||"" }
                 qw(DBD SERVER DATABASE USER);
@@ -207,12 +207,12 @@ sub delete_realm {
 sub check_realm {
     my $dir = $Opt{dir};
     if ($Opt{shared}) {
-        $dir ||= $DBIx::Connector::SHARED_CONNECTION_DIR;
+        $dir ||= $NHGRI::Db::Connector::SHARED_CONNECTION_DIR;
     }
     eval {
         # Silence PrintError warning
         local $SIG{__WARN__} = sub {};
-        my $dbc = DBIx::Connector->new(max_wait => 0,
+        my $dbc = NHGRI::Db::Connector->new(max_wait => 0,
                 realm => $Opt{realm}, connection_dir => $dir);
         my $file = $dbc->find_realm_file();
         if ($Opt{quiet} < 2) {
@@ -226,7 +226,7 @@ sub check_realm {
     if ($@) {
         if ($Opt{quiet} < 2) {
             my $msg = $@;
-            $msg =~ s/ at \S*DBIx\/Connector\.pm line \d+//g;
+            $msg =~ s/ at \S*NHGRI::Db\/Connector\.pm line \d+//g;
             warn $msg;
         }
         exit 2;
@@ -254,7 +254,7 @@ sub choose_source_realm {
     # Source dir is explicit, shared, or automatically determined
     my $dir = $Opt{dir};
     if ($Opt{shared}) {
-        $dir ||= $DBIx::Connector::SHARED_CONNECTION_DIR;
+        $dir ||= $NHGRI::Db::Connector::SHARED_CONNECTION_DIR;
     }
     # Determine realm to use
     my $source;
@@ -265,7 +265,7 @@ sub choose_source_realm {
         foreach my $realm ($Opt{realm}, 'default') {
             next if !$realm;
             eval {
-                DBIx::Connector->new(
+                NHGRI::Db::Connector->new(
                     -realm => $realm,
                     -connection_dir => $dir,
                 );
@@ -277,7 +277,7 @@ sub choose_source_realm {
         }
     }
     if ($source) {
-        my $dbc = DBIx::Connector->new(
+        my $dbc = NHGRI::Db::Connector->new(
             -realm => $source,
             -connection_dir => $dir,
         );
@@ -334,7 +334,7 @@ sub write_new_realm {
     }
     return $test if $test;
 
-    my $success = DBIx::Connector->write_realm_file(
+    my $success = NHGRI::Db::Connector->write_realm_file(
         FILENAME=> $file,
         DBD     => $Opt{dbd},
         SERVER  => $Opt{server},
@@ -449,6 +449,6 @@ this software under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-L<DBIx::Connector>
+L<NHGRI::Db::Connector>
 
 =cut

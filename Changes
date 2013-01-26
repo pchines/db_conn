@@ -1,5 +1,11 @@
-Revision history for Perl extension DBIx::Connector.
+Revision history for Perl extension NHGRI::Db::Connector.
 
+0.81  Sat Jan 26 14:59:59 EST 2013
+    - move to git version control
+    - rename module from DBIx::Connector to NHGRI::Db::Connector, since the
+      former name is now used by another CPAN distribution.
+0.80a
+    - last version in CVS
 0.80  Thu Apr  1 22:29:32 EDT 2010
     - Rollback before disconnect if not in AutoCommit mode
 0.79

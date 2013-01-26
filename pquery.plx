@@ -5,7 +5,7 @@ use strict;
 use warnings;
 use Getopt::Long;
 use Pod::Usage;
-use DBIx::Connector;
+use NHGRI::Db::Connector;
 use File::Spec;
 use IO::File;
 use Text::Balanced qw(extract_bracketed);
@@ -272,7 +272,7 @@ sub read_query {
         if (s/^##\s*//) {
             if (/^DefaultDb\s*:\s*(\w+)/) {
                 $Opt{dbc_realm} ||= $1;
-                $Dbc = DBIx::Connector->new(realm => $Opt{dbc_realm});
+                $Dbc = NHGRI::Db::Connector->new(realm => $Opt{dbc_realm});
             }
             print STDERR;
         }
@@ -704,7 +704,7 @@ sub process_commandline {
     }
     else {
         # Doing this here allows us to fail quickly if realm is wrong
-        $Dbc = DBIx::Connector->new(
+        $Dbc = NHGRI::Db::Connector->new(
                 realm => $Opt{dbc_realm} || $DEFAULT_REALM );
     }
 }

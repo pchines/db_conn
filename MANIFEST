@@ -1,7 +1,7 @@
 Changes
 dbc_passwd
 dbc_realm
-lib/DBIx/Connector.pm
+lib/NHGRI/Db/Connector.pm
 Makefile.PL
 MANIFEST
 META.yml			Module meta-data (added by MakeMaker)

@@ -1,4 +1,4 @@
-DBIx::Connector - centralize and personalize database connection parameters
+NHGRI::Db::Connector - centralize and personalize database connection parameters
 
 The database connector is a Perl module that can be used to get a DBI
 database handle without having to hard-code any of the database connection
@@ -16,7 +16,7 @@ ALWAYS use the standard Perl installation process:
 
 and answer all of the questions carefully.  This will ensure that your
 standard directories are configured correctly, and if the tests run
-cleanly, your environment is ready for use with DBIx::Connector.
+cleanly, your environment is ready for use with NHGRI::Db::Connector.
 
 Note that many of the tests require the Test::Cmd module.  It is only used
 during testing, and if it is not installed, the only impact will be that
@@ -30,25 +30,25 @@ to shared directories and 2) creating realm files.
 
 PERMISSIONS
 
-    Passwords are stored in the clear in realm files.  DBIx::Connector
+    Passwords are stored in the clear in realm files.  NHGRI::Db::Connector
     relies on your operating system's filesystem permissions to protect the
     username and password information in the realm files.  IT IS YOUR
     RESPONSIBILITY to set these permissions appropriately.
 
     One of the decisions you make during the installation procedure is
     where you want to keep the shared realm files that hold the database
-    connection parameters.  When you install DBIx::Connector, this
+    connection parameters.  When you install NHGRI::Db::Connector, this
     directory is created, using the umask and other information of the user
     performing the installation (usually root).
 
     You must decide who should have the ability to create and modify shared
     database realm files and set the permissions on this directory
-    accordingly.  Everyone who uses the DBIx::Connector will need the
+    accordingly.  Everyone who uses the NHGRI::Db::Connector will need the
     ability to access (in Unix, the 'execute' bit) this directory, and to
     read the particular realm files that they are allowed to use.
 
     The decision to store passwords in the clear was made after much
-    deliberation.  Since the whole point of DBIx::Connector is to obtain
+    deliberation.  Since the whole point of NHGRI::Db::Connector is to obtain
     access to database credentials without further interaction, the module
     must contain all of the information needed to decrypt the passwords,
     and thus any encryption would be illusory.  It would only make it more
@@ -57,7 +57,7 @@ PERMISSIONS
 REALM FILES
 
     Database realm connection files are most easily created using the
-    "dbc_realm" script installed along with the DBIx::Connector.  See the
+    "dbc_realm" script installed along with the NHGRI::Db::Connector.  See the
     dbc_realm man page for details.
 
     When users want to change their passwords, this process is simplified
@@ -106,20 +106,20 @@ REALM FILES
        not host multiple databases or does not support the "use" statement,
        leave this parameter blank.
 
-USING DBIx::Connector
+USING NHGRI::Db::Connector
 
-For complete instructions, see the man page or perldoc for DBIx::Connector
+For complete instructions, see the man page or perldoc for NHGRI::Db::Connector
 and its related programs, dbc_realm and dbc_passwd.  In brief,
 
-    use DBIx::Connector;
-    my $dbc = new DBIx::Connector(-realm => 'pubs2');
+    use NHGRI::Db::Connector;
+    my $dbc = new NHGRI::Db::Connector(-realm => 'pubs2');
     my $dbh = $dbc->connect();
     ... (continue, using DBI handle in the normal way; don't disconnect)
 
 ADVANTAGES
 
 By keeping the database connection information in private or shared realm
-files, DBIx::Connector makes it easy to:
+files, NHGRI::Db::Connector makes it easy to:
 
     * Perform Database Migration
 
@@ -148,7 +148,7 @@ files, DBIx::Connector makes it easy to:
        Save time by avoiding having to make a new connection to the
        database for each database access, without having to pass a DBI
        database handle around from one routine to another.  The
-       DBIx::Connector only makes a database connection if you need one,
+       NHGRI::Db::Connector only makes a database connection if you need one,
        so if your script never uses the database, your program takes no
        performance hit.
 
@@ -162,7 +162,7 @@ means this won't work:
 
     # Warning: incorrect code
     sub get_dbh {
-        my $dbc = DBIx::Connector->new(-realm => 'mydb');
+        my $dbc = NHGRI::Db::Connector->new(-realm => 'mydb');
         return $dbc->connect();
     }
 
@@ -170,28 +170,28 @@ because the $dbc object is destroyed at the end of the subroutine, and thus
 the DBI handle returned from the connect() method is disconnected from the
 database.
 
-There are two ways of avoiding this problem.  The preferred way is to make
-the Connector a global, and just call the connect() method on this global
-when you want a DBI handle, e.g.
+There are two ways of avoiding this problem.  The preferred way is to make the
+Connector a global or instance variable, and just call the connect() method on
+this object when you want a DBI handle, e.g.
 
-    our $Dbc = DBIx::Connector->new(-realm => 'mydb');
+    our $Dbc = NHGRI::Db::Connector->new(-realm => 'mydb');
     ...
     my $dbh = $Dbc->connect();
 
 The other way is to manage the lifetime of the DBI handle on your own.  To do
-this, set the -no_disconnect flag when you create the DBIx::Connector object.
-By doing this, you give up many of the benefits of DBIx::Connector, but if
+this, set the -no_disconnect flag when you create the NHGRI::Db::Connector object.
+By doing this, you give up many of the benefits of NHGRI::Db::Connector, but if
 this is what you want, I won't stop you--that isn't the Perl way.
 
 AUTHORS
 
-DBIx::Connector was originally created by Anthony Masiello, and was later
+NHGRI::Db::Connector was originally created by Anthony Masiello, and was later
 modified by Ken Trout and Peter Chines to support private realm files.  The
 current version is a near-complete rewrite by Peter, to make installation
 and maintenance easier and allow the software to be more easily extended to
 work with different database servers.
 
-    Peter S. Chines <pchines@psc.web66.com>
+    Peter S. Chines <pchines@gmail.com>
     Anthony J. Masiello <anthony@masiello.org>
     Kenneth Trout <mizumi@fred.net>
 
@@ -204,5 +204,5 @@ questions, patches, etc. to Peter at the address above.
 
 LICENSE
 
-Copyright (c) 2002-2004, Peter S. Chines.  You may freely use, modify, and
+Copyright (c) 2002-2013, Peter S. Chines.  You may freely use, modify, and
 distribute this software under the same terms as Perl itself.

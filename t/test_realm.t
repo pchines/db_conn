@@ -6,7 +6,7 @@ BEGIN {
 }
 END { print "not ok 1\n" unless $main::loaded; }
 
-use DBIx::Connector;
+use NHGRI::Db::Connector;
 ok $main::loaded = 1;
 
 if (!-f 'test') {
@@ -16,7 +16,7 @@ if (!-f 'test') {
 
 my ($dbc, $dbh);
 eval {
-    $dbc = new DBIx::Connector(-connection_dir => '.', -realm => 'test');
+    $dbc = new NHGRI::Db::Connector(-connection_dir => '.', -realm => 'test');
     $dbh = $dbc->connect;
 };
 if ($@){
@@ -27,7 +27,7 @@ ok($dbh && !$@);  # normal connection
 # Test that warns on extra parameters
 $SIG{__WARN__} = sub { die @_ };
 eval {
-    $dbc = new DBIx::Connector(-connection_dir => '.', -realm => 'test',
+    $dbc = new NHGRI::Db::Connector(-connection_dir => '.', -realm => 'test',
             -extra => 'ignored');
 };
 ok $@, qr/EXTRA => 'ignored'/, "warn about extra parameter";
@@ -36,7 +36,7 @@ ok $@, qr/EXTRA => 'ignored'/, "warn about extra parameter";
 $SIG{__WARN__} = sub {};
 $dbc = undef;
 eval {
-    $dbc = new DBIx::Connector(-connection_dir => '.', -realm => 'test',
+    $dbc = new NHGRI::Db::Connector(-connection_dir => '.', -realm => 'test',
             -extra => 'ignored');
 };
 ok $@, "", "extra params not fatal";
@@ -48,7 +48,7 @@ undef $dbc;
 ok !$dbh->{Active};
 
 # should not disconnect
-$dbc = new DBIx::Connector(-connection_dir => '.', -realm => 'test',
+$dbc = new NHGRI::Db::Connector(-connection_dir => '.', -realm => 'test',
             -no_disconnect => 1);
 ok $dbc;
 $dbh = $dbc->connect();
@@ -57,7 +57,7 @@ undef $dbc;
 ok $dbh->{Active};
 $dbh->disconnect();
 
-$dbc = new DBIx::Connector(-connection_dir => '.', -realm => 'test');
+$dbc = new NHGRI::Db::Connector(-connection_dir => '.', -realm => 'test');
 $dbh = $dbc->connect();
 my $dbc2 = $dbc->clone();
 my $dbh2 = $dbc2->connect();
@@ -73,16 +73,16 @@ ok $dbh->{Active}, 1, 'should automatically reconnect';
 ok $dbh->ping(), 1, 'means same thing';
 
 # Test time suffixes
-my $sec = DBIx::Connector::_time_to_sec('23 sec');
+my $sec = NHGRI::Db::Connector::_time_to_sec('23 sec');
 ok $sec, 23, "seconds";
-$sec = DBIx::Connector::_time_to_sec('2.5m');
+$sec = NHGRI::Db::Connector::_time_to_sec('2.5m');
 ok $sec, 2.5*60, "minutes";
-$sec = DBIx::Connector::_time_to_sec(' .1h ');
+$sec = NHGRI::Db::Connector::_time_to_sec(' .1h ');
 ok $sec, .1*60*60, "hours";
-$sec = DBIx::Connector::_time_to_sec('5days');
+$sec = NHGRI::Db::Connector::_time_to_sec('5days');
 ok $sec, 5*60*60*24, "days";
 eval {
-    $sec = DBIx::Connector::_time_to_sec('2 weeks');
+    $sec = NHGRI::Db::Connector::_time_to_sec('2 weeks');
 };
 ok $@=~/not understood/;
 
@@ -93,7 +93,7 @@ for my $exp (1, 2, 4, 8, 16, 32, 60, 60) {
     $int = $dbc2->_next_interval($int, 60);
     ok $int, $exp, 'next interval';
 }
-$dbc = DBIx::Connector->new(
+$dbc = NHGRI::Db::Connector->new(
         connection_dir => '.', 
         realm => 'test',
         min_interval    => 5,

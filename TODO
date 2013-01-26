@@ -3,14 +3,14 @@ editing of realm files, e.g. when answer is '?'; this could later be made
 specific to particular DBD engines, when polymorphism is incorporated.
 
 Separate change password method for each DBD, using polymorphism.
-This will make it easier to extend DBIx::Connector.
+This will make it easier to extend NHGRI::Db::Connector.
 Also test for syntactically correct server/database options.
 
 Consider using YAML or some other technique to encode DBI connect
 parameters, e.g. PrintError, AutoCommit, etc. into realm files.  Can do this
 more simply by just putting them all on one line, e.g.
 DBI_PARAM=PrintError=>0, AutoCommit=>1, RaiseError=>1
-or, in the style of DBIx::Connect:
+or, in the style of NHGRI::Db::Connect:
 ATTR PrintError=0
 or just:
 PrintError=0

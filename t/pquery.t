@@ -8,8 +8,8 @@ plan tests => 31;
 
 my ($Dbc);
 eval q{
-    use DBIx::Connector;
-    $Dbc = DBIx::Connector->new(realm => 'test_mysql');
+    use NHGRI::Db::Connector;
+    $Dbc = NHGRI::Db::Connector->new(realm => 'test_mysql');
     my $dbh = $Dbc->connect();
     if ($dbh->get_info(17) ne 'MySQL') {
         undef $Dbc;

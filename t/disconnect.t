@@ -1,7 +1,7 @@
 use Test::More;
 plan tests => 4;
 
-use_ok 'DBIx::Connector';
+use_ok 'NHGRI::Db::Connector';
 
 my $is_oracle;
 open REALM, "test"; # ignore error if missing
@@ -14,14 +14,14 @@ SKIP: {
     skip "Test db is not transaction-capable", 3 if !$is_oracle;
 
 {   # create a scope
-    my $dbc = DBIx::Connector->new(
+    my $dbc = NHGRI::Db::Connector->new(
             realm => 'test',
             connection_dir => '.',
             dbi_attrib => {
                 AutoCommit => 0,
                 },
             );
-    isa_ok $dbc, 'DBIx::Connector';
+    isa_ok $dbc, 'NHGRI::Db::Connector';
 
     my $dbh = $dbc->connect();
     $dbh->do(q{
@@ -44,7 +44,7 @@ SKIP: {
 }
 # now $dbc is out of scope, should have disconnected
 
-my $dbc = DBIx::Connector->new(
+my $dbc = NHGRI::Db::Connector->new(
         realm => 'test',
         connection_dir => '.',
         dbi_attrib => {

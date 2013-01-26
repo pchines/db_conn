@@ -1,14 +1,14 @@
-# This -*- perl -*- script writes the Makefile for DBIx::Connector
+# This -*- perl -*- script writes the Makefile for NHGRI::Db::Connector
 # $Id: Makefile.PL,v 1.23 2010/01/21 21:04:15 pchines Exp $
 
 use strict;
 use ExtUtils::MakeMaker;
 # use lib so we use the current version, rather than previously installed one
 use lib 'lib';
-use DBIx::Connector qw(ask ask_pass);
+use NHGRI::Db::Connector qw(ask ask_pass);
 use File::Spec;
 
-$main::MODULE_FILE = 'lib/DBIx/Connector.pm';
+$main::MODULE_FILE = 'lib/NHGRI::Db/Connector.pm';
 $main::CONFIG_LOCAL = 'dbix_connector.cfg';
 $main::CONFIG_PATH  = '/usr/local/etc/dbix_connector.cfg';
 $main::TEST_REALM_FILE = './test';
@@ -22,7 +22,7 @@ $main::PQ_FILE = 'pquery.plx';
 print << "INTRO";
 
 The answers to the following questions will be used to configure the
-DBIx::Connector module.  Please take the time to read the instructions
+NHGRI::Db::Connector module.  Please take the time to read the instructions
 and answer carefully.  When a default answer is provided in square brackets,
 you can accept the default by pressing the return key.  You may run
 'perl Makefile.PL' again to change your answers.
@@ -45,7 +45,7 @@ if ($dbd) {
     my $user     = get_user();
     my $pass     = get_pass();
     my $database = get_database();
-    DBIx::Connector->write_realm_file(
+    NHGRI::Db::Connector->write_realm_file(
         FILENAME => $main::TEST_REALM_FILE,
         DBD      => $dbd,
         SERVER   => $server,
@@ -54,7 +54,7 @@ if ($dbd) {
         DATABASE => $database,
         );
     if (ask_do_live_test() =~ /^y/i) {
-        DBIx::Connector->write_realm_file(
+        NHGRI::Db::Connector->write_realm_file(
         FILENAME => $main::TEST_REALM_LIVE,
         DBD      => $dbd,
         SERVER   => $server,
@@ -74,7 +74,7 @@ else {  # no test
 
 # Write the Makefile (with customizations from the MY:: methods below)
 WriteMakefile(
-    'NAME'         => 'DBIx::Connector',
+    'NAME'         => 'NHGRI::Db::Connector',
     'VERSION_FROM' => $main::MODULE_FILE,
     'PREREQ_PM'    => {
             DBI             => 1.0,
@@ -89,11 +89,11 @@ WriteMakefile(
 if ($dbd && !do "Test/Cmd.pm") {
     print << "TESTCMD";
 To run the complete set of tests, you must install the Test::Cmd module.
-However, this module is not required to install or run DBIx::Connector.
+However, this module is not required to install or run NHGRI::Db::Connector.
 
 TESTCMD
 }
-if (!$DBIx::Connector::USE_READKEY) {
+if (!$NHGRI::Db::Connector::USE_READKEY) {
     print << "READKEY";
 It is recommended that you install the Term::ReadKey module.  This will enable
 dbc_passwd to accept passwords without displaying them on the screen.
@@ -123,7 +123,7 @@ install_config_file:
 install_connection_dir:
 \t-\$(MKPATH) $main::PUB_DIR
 \t\@echo
-\t\@echo To finish setting up DBIx::Connector:
+\t\@echo To finish setting up NHGRI::Db::Connector:
 \t\@echo 1. Remember to set proper permissions for $main::PUB_DIR
 \t\@echo    and $main::PQ_PATH
 \t\@echo 2. Create new database realms by running the dbc_realm script
@@ -160,8 +160,8 @@ sub create_local_config {
     }
     else {
         $config = << 'DEFAULT_CONFIG';
-# Configuration file for perl module DBIx::Connector
-# Run perldoc DBIx::Connector for details
+# Configuration file for perl module NHGRI::Db::Connector
+# Run perldoc NHGRI::Db::Connector for details
 DEFAULT_CONFIG
     }
     if ($config !~ /$main::SH_REGEX/) {
@@ -433,7 +433,7 @@ For many database management systems, a single server can host many
 databases.  While you would ordinarily choose a database in the server
 connect string, some databases allow you to issue a 'use' command after
 connecting to choose the database to connect to.  If you supply a database
-name here, DBIx::Connector will issue a 'use <database>' command upon
+name here, NHGRI::Db::Connector will issue a 'use <database>' command upon
 connecting.  If unsure, leave this blank.
 
 END
@@ -443,7 +443,7 @@ END
 
 sub read_test_realm {
     if (-e $main::TEST_REALM_FILE) {
-        return DBIx::Connector->read_realm_file(
+        return NHGRI::Db::Connector->read_realm_file(
             -FILENAME => $main::TEST_REALM_FILE);
     }
     else {

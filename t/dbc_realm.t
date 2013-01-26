@@ -10,7 +10,7 @@ BEGIN {
 END {
     print "not ok 1\n" unless $main::loaded;
 }
-use DBIx::Connector;
+use NHGRI::Db::Connector;
 ok $main::loaded = 1;
 
 my $program = './dbc_realm';

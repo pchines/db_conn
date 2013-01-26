@@ -10,7 +10,7 @@ BEGIN {
 END {
     print "not ok 1\n" unless $main::loaded;
 }
-use DBIx::Connector;
+use NHGRI::Db::Connector;
 ok $main::loaded = 1;
 
 my $program = './dbc_passwd';
@@ -53,11 +53,11 @@ ok($test->stderr(), qr/cannot be found/, "realm does not exist");
 my $rh;
 my $change_password = 0;
 if (-f "test.live") {
-    $rh = DBIx::Connector->read_realm_file(-filename => 'test.live');
+    $rh = NHGRI::Db::Connector->read_realm_file(-filename => 'test.live');
     $change_password = 1;
 }
 elsif (-f "test") {
-    $rh = DBIx::Connector->read_realm_file(-filename => 'test');
+    $rh = NHGRI::Db::Connector->read_realm_file(-filename => 'test');
 }
 else {
     skip("skip no test realm",0) for (1..11);
@@ -83,7 +83,7 @@ if ($change_password) {
             0, "changed password");
     ok($test->stdout(), qr/Database password successfully set/);
     ok($test->stdout(), qr/Realm file successfully updated/);
-    my $dbc = DBIx::Connector->new(-connection_dir => $shared_dir);
+    my $dbc = NHGRI::Db::Connector->new(-connection_dir => $shared_dir);
     my $rh_new = $dbc->read_realm_file();
     ok($rh_new->{PASS}, "new_pass", "password changed in realm file");
     ok($dbc->connect());

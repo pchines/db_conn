@@ -3,7 +3,7 @@
 
 =head1 NAME
 
-dbc_passwd - set password for DBIx::Connector database realm
+dbc_passwd - set password for NHGRI::Db::Connector database realm
 
 =head1 SYNOPSIS
 
@@ -18,7 +18,7 @@ To set the password for a different database realm:
 =head1 DESCRIPTION
 
 This script allows a user to change his or her own database password,
-including changing the DBIx::Connector realm file.  This is much more
+including changing the NHGRI::Db::Connector realm file.  This is much more
 convenient than logging into the database with a SQL monitor, remembering the
 syntax to make the change, then updating the realm file manually.
 
@@ -28,7 +28,7 @@ use strict;
 use Getopt::Long;
 use Pod::Usage;
 use File::Spec;
-use DBIx::Connector qw(ask_pass);
+use NHGRI::Db::Connector qw(ask_pass);
 use vars qw(%Opt $DBC $RH_REALM_PARAMS);
 
 ######### BEGIN MAIN PROGRAM #########
@@ -79,7 +79,7 @@ sub get_commandline_options {
     }
     if ($Opt{version}) {
         die "dbc_passwd, ", q$Revision: 1.15 $,
-            "(part of DBIx::Connector release $DBIx::Connector::VERSION)\n";
+            "(part of NHGRI::Db::Connector release $NHGRI::Db::Connector::VERSION)\n";
     }
 
     # Realm name comes from --realm option or first argument, but not both
@@ -91,10 +91,10 @@ sub get_commandline_options {
     }
     $Opt{realm} ||= "default";
 
-    $Opt{dir} ||= $DBIx::Connector::SHARED_CONNECTION_DIR if $Opt{shared};
+    $Opt{dir} ||= $NHGRI::Db::Connector::SHARED_CONNECTION_DIR if $Opt{shared};
     $Opt{shared} = 1 if $Opt{dir};
     print "Using '$Opt{realm}' database realm\n";
-    $DBC = DBIx::Connector->new(
+    $DBC = NHGRI::Db::Connector->new(
         -realm          => $Opt{realm},
         -connection_dir => $Opt{dir},
         -max_wait       => 0,
@@ -167,9 +167,9 @@ sub change_password {
 =item B<--realm> realm_name
 
 The database realm to use; default is 'default'.  In order to use this realm
-successfully, there should be a valid, working DBIx::Connector realm file in
+successfully, there should be a valid, working NHGRI::Db::Connector realm file in
 the users' private connection directory (typically, ~/.db_connections), named
-the same as the realm.  See L<DBIx::Connector> for more information about
+the same as the realm.  See L<NHGRI::Db::Connector> for more information about
 realm files, and L<dbc_realm> for assistance with creating or updating
 one.
 
@@ -203,6 +203,6 @@ this software under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
-L<DBIx::Connector>, L<dbc_realm>
+L<NHGRI::Db::Connector>, L<dbc_realm>
 
 =cut

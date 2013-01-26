@@ -1,5 +1,5 @@
 # $Id: Connector.pm,v 1.33 2013/01/26 02:41:44 pchines Exp $
-package DBIx::Connector;
+package NHGRI::Db::Connector;
 
 use strict;
 use vars qw(@EXPORT_OK @ISA $VERSION
@@ -77,7 +77,7 @@ sub new {
     # warn for any extra options:
     my $extra = join("", map { "\t$_ => '$rh_args->{$_}'\n" }
             sort keys %$rh_args);
-    carp "DBIx::Connector: did not understand these parameters "
+    carp "NHGRI::Db::Connector: did not understand these parameters "
         ."(please check spelling):\n$extra" if $extra;
 
     bless $self, ref $pkg || $pkg;
@@ -416,13 +416,13 @@ __END__
 
 =head1 NAME
 
-DBIx::Connector - centralize and personalize database connection parameters
+NHGRI::Db::Connector - centralize and personalize database connection parameters
 
 =head1 SYNOPSIS
 
-  use DBIx::Connector;
+  use NHGRI::Db::Connector;
 
-  my $dbc = new DBIx::Connector(-realm => 'pubs2');
+  my $dbc = new NHGRI::Db::Connector(-realm => 'pubs2');
 
   my $dbh = $dbc->connect();
 
@@ -464,7 +464,7 @@ granted.
 
 Save time by avoiding having to make a new connection to the database for
 each database access, without having to pass a DBI database handle around
-from one routine to another.  The DBIx::Connector only makes a database
+from one routine to another.  The NHGRI::Db::Connector only makes a database
 connection if you need one, so if your script never uses the database, your
 program takes no performance hit.
 
@@ -476,11 +476,11 @@ re-connect, for a given period of time, rather than simply aborting.
 
 =back
 
-=head1 USING DBIx::Connector
+=head1 USING NHGRI::Db::Connector
 
 =head2 Creating
 
-my $dbc = new DBIx::Connector(-realm =E<gt> 'pubs2');
+my $dbc = new NHGRI::Db::Connector(-realm =E<gt> 'pubs2');
 
 At the beginning of your program create a new database 
 connector C<$dbc>.  Creating the dbc object does not connect
@@ -531,12 +531,12 @@ itself.
 
 You may read the realm file from a non-standard directory.  This is not
 usually recommended, since it foregoes some of the benefits of using
-DBIx::Connector.  Nevertheless, it is sometimes useful.  When you specify a
+NHGRI::Db::Connector.  Nevertheless, it is sometimes useful.  When you specify a
 connection directory explicitly, I<only> this directory is searched;
-DBIx::Connector does not search your private connection directory or the
+NHGRI::Db::Connector does not search your private connection directory or the
 standard shared directory.
 
-  my $dbc = new DBIx::Connector(
+  my $dbc = new NHGRI::Db::Connector(
       -realm          => 'pubs2', 
       -connection_dir => '/other/dir',
   );
@@ -548,7 +548,7 @@ See also L</ENVIRONMENT VARIABLES>.
 You can pass any additional parameters that you would ordinarily pass in the
 fourth parameter to DBI->connect() in the C<-dbi_attrib> parameter:
 
-  my $dbc = new DBIx::Connector(
+  my $dbc = new NHGRI::Db::Connector(
       -realm       => 'pubs2',
       -dbi_attrib  => {
           RaiseError => 1,
@@ -563,7 +563,7 @@ fourth parameter to DBI->connect() in the C<-dbi_attrib> parameter:
 
 Creates a database connector for the specified database realm.
 
-  Usage:    my $dbc = DBIx::Connector->new();
+  Usage:    my $dbc = NHGRI::Db::Connector->new();
   Args:     -realm          => realm name, default is 'default'
             -connection_dir => directory where realm files are
                                stored; default is configured at
@@ -594,7 +594,7 @@ Creates a database connector for the specified database realm.
                                 end     => epoch seconds after which no
                                            further attempts will be made 
                                 errmsg  => error message as reported by DBI
-  Returns:  a new DBIx::Connector object
+  Returns:  a new NHGRI::Db::Connector object
   Except:   croaks if the specified realm does not exist
 
 =head2 connect
@@ -692,9 +692,9 @@ default simply by pressing just the return key.
 
 Note that this is not a method, but a subroutine designed for export.  To use
 it in your own script, you should import the ask() method when you C<use>
-DBIx::Connector, e.g.:
+NHGRI::Db::Connector, e.g.:
 
-    use DBIx::Connector qw(ask);
+    use NHGRI::Db::Connector qw(ask);
 
 =head2 ask_pass
 
@@ -723,26 +723,26 @@ ALWAYS use the standard Perl installation process:
 
 and answer all of the questions carefully.  This will ensure that your
 standard directories are configured correctly, and if the tests run cleanly,
-your environment is ready for use with DBIx::Connector.
+your environment is ready for use with NHGRI::Db::Connector.
 
 =head2 Establish Connection Directory Permissions
 
 One of the decisions you make during the installation procedure is where you
 want to keep the shared realm files that hold the database connection
-parameters.  When you install DBIx::Connector, this directory is created,
+parameters.  When you install NHGRI::Db::Connector, this directory is created,
 using the umask and other information of the user performing the installation
 (usually root).
 
 You must decide who should have the ability to create and modify shared
 database realm files and set the permissions on this directory accordingly.
-Everyone who uses the DBIx::Connector will need the ability to access (in
+Everyone who uses the NHGRI::Db::Connector will need the ability to access (in
 Unix, the 'execute' bit) this directory, and to read the particular realm
 files that they are allowed to use.
 
 =head2 Database Realm Connection Files
 
 Realm connection files are most easily created using the C<dbc_realm>
-script installed along with the DBIx::Connector.  See L<dbc_realm> for
+script installed along with the NHGRI::Db::Connector.  See L<dbc_realm> for
 details.
 
 When users want to change their passwords, this process is simplified
@@ -823,7 +823,7 @@ means this won't work:
 
     # Warning: incorrect code
     sub get_dbh {
-        my $dbc = DBIx::Connector->new(-realm => 'mydb');
+        my $dbc = NHGRI::Db::Connector->new(-realm => 'mydb');
         return $dbc->connect();
     }
 
@@ -835,13 +835,13 @@ There are two ways of avoiding this problem.  The preferred way is to make
 the Connector a global, and just call the connect() method on this global
 when you want a DBI handle, e.g.
 
-    our $Dbc = DBIx::Connector->new(-realm => 'mydb');
+    our $Dbc = NHGRI::Db::Connector->new(-realm => 'mydb');
     ...
     my $dbh = $Dbc->connect();
 
 The other way is to manage the lifetime of the DBI handle on your own.  To do
-this, set the -no_disconnect flag when you create the DBIx::Connector object.
-By doing this, you give up some of the benefits of DBIx::Connector, but if
+this, set the -no_disconnect flag when you create the NHGRI::Db::Connector object.
+By doing this, you give up some of the benefits of NHGRI::Db::Connector, but if
 this is what you want, I won't stop you--that isn't the Perl way.
 
 =head1 AUTHORS
