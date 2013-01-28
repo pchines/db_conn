@@ -81,10 +81,9 @@ WriteMakefile(
             'Text::Balanced'=> 0,
             },
     'EXE_FILES'    => [qw(dbc_realm dbc_passwd)],
-    ($] ge '5.005') ? (
-        AUTHOR   => 'Peter Chines (pchines@cpan.org)',
-        ABSTRACT_FROM => $main::MODULE_FILE,
-    ) : (),
+    'AUTHOR'       => 'Peter Chines <pchines@cpan.org>',
+    'ABSTRACT_FROM'=> $main::MODULE_FILE,
+    'LICENSE'      => 'perl',
 );
 if ($dbd && !do "Test/Cmd.pm") {
     print << "TESTCMD";
