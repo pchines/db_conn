@@ -260,6 +260,8 @@ sub ask {
     if ($response eq '' && defined $default) {
         $response = $default;
     }
+    $response =~ s/^\s+//;
+    $response =~ s/\s+$//;
     return $response;
 }
 
