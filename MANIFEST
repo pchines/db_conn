@@ -1,5 +1,4 @@
 Changes
-db_connector.cfg
 dbc_passwd
 dbc_realm
 lib/NHGRI/Db/Connector.pm

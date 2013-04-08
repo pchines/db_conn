@@ -78,10 +78,10 @@ WriteMakefile(
     'VERSION_FROM' => $main::MODULE_FILE,
     'PREREQ_PM'    => {
             DBI             => 1.0,
-            'Text::Balanced'=> 0,
+#            'Text::Balanced'=> 0,  # needed for pquery only
             },
     'EXE_FILES'    => [qw(dbc_realm dbc_passwd)],
-    'AUTHOR'       => 'Peter Chines <pchines@cpan.org>',
+    'AUTHOR'       => 'Peter Chines <pchines@mail.nih.gov>',
     'ABSTRACT_FROM'=> $main::MODULE_FILE,
     'LICENSE'      => 'perl',
 );
@@ -114,7 +114,7 @@ CREATE_DIR
 
 sub MY::postamble {
     return << "RULE";
-install :: install_config_file install_connection_dir install_query_dir
+install :: install_config_file install_connection_dir
 
 install_config_file:
 \t\$(CP) $main::CONFIG_LOCAL $main::CONFIG_PATH
@@ -128,8 +128,8 @@ install_connection_dir:
 \t\@echo 2. Create new database realms by running the dbc_realm script
 \t\@echo 3. Delete test realm files--make realclean will do this for you
 
-install_query_dir:
-\t-\$(MKPATH) `perl -e 'join " ", split ":", $ARGV[0]' $main::PQ_PATH`
+#install_query_dir:
+#\t-\$(MKPATH) `perl -e 'join " ", split ":", $ARGV[0]' $main::PQ_PATH`
 
 realclean :: clean_realm_file clean_local_config
 
@@ -147,7 +147,7 @@ sub create_local_config {
     # Use existing config file, if possible
     if (-e $main::CONFIG_LOCAL) {
         my ($sh, $pr, $pq) = _read_config($main::CONFIG_LOCAL);
-        return 1 if $sh && $pr && $pq;
+        return 1 if $sh && $pr;
         warn "Invalid data in '$main::CONFIG_LOCAL', overwriting\n";
     }
     my $config;
@@ -163,14 +163,14 @@ sub create_local_config {
 # Run perldoc NHGRI::Db::Connector for details
 DEFAULT_CONFIG
     }
-    if ($config !~ /$main::SH_REGEX/) {
+    if ($config !~ /$main::SH_REGEX/m) {
         $config .= << 'DEFAULT_CONFIG'
 
 # Location of shared connector realm files:
 $SHARED_CONNECTION_DIR = '/usr/local/share/db_connections';
 DEFAULT_CONFIG
     }
-    if ($config !~ /$main::PR_REGEX/) {
+    if ($config !~ /$main::PR_REGEX/m) {
         $config .= << 'DEFAULT_CONFIG'
 
 # Location of private realm files (relative to user's HOME directory):
