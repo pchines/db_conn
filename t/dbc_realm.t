@@ -39,7 +39,7 @@ ok($test->stderr(), qr/Usage:/);
 $test->run(args => '-h');       # produce option help
 ok($test->stdout(), qr/Options:/);
 $test->run(args => '-man');     # produce long help
-ok($test->stdout(), qr/DBC_REALM/);
+ok($test->stdout(), qr/DBC_REALM/i);
 $test->run(args => '-v');       # display version
 ok($test->stderr(), qr/^dbc_realm, Revision/);
 

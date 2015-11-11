@@ -226,7 +226,7 @@ sub read_list {
                 . "this will not produce a valid query\n";
         }
         elsif ($Opt{debug}) {
-            warn sprintf("Read %d items from '$file'\n", scalar(@list), $file);
+            warn sprintf("Read %d items from '%s'\n", scalar(@list), $file);
         }
         return \@list;
     }
