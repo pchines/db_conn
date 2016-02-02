@@ -38,30 +38,40 @@ test_realm() if !$Opt{local_only};
 
 my $user = $RH_REALM_PARAMS->{'USER'};
 print "Setting password for database user '$user'\n";
-my $old  = ask_pass("Old database password: ");
-if ($old ne $RH_REALM_PARAMS->{'PASS'}) {
-    die "Password does not match password in realm file.\n";
+my $old;
+if (!$Opt{local_only}) {
+    $old  = ask_pass("Old database password: ");
+    if ($old ne $RH_REALM_PARAMS->{'PASS'}) {
+        die "Password does not match password in realm file.\n";
+    }
 }
 my $new  = ask_pass("New database password: ");
-my $new2 = ask_pass("  Repeat new password: ");
-if ($new ne $new2) {
-    die "New password entered two different ways; aborting.\n";
-}
-
-if ($Opt{local_only} || change_password($user,$old,$new)) {
-    print "\nDatabase password successfully set.\n";
-    if ($DBC->write_realm_file(%$RH_REALM_PARAMS,
-            SHARED  => $Opt{shared},
-            PASS    => $new,
-            )) {
-        print "Realm file successfully updated.\n";
+if (!$Opt{local_only}) {
+    my $new2 = ask_pass("  Repeat new password: ");
+    if ($new ne $new2) {
+        die "New password entered two different ways; aborting.\n";
+    }
+    if (change_password($user,$old,$new)) {
+        print "\nDatabase password successfully set.\n";
     }
     else {
-        # probably won't ever get here, because write_realm_file() dies
-        # on error, but just in case behavior changes
-        die "WARNING: Realm file was not updated!\n";
+        die "\nPassword not updated on server due to error.\n"
+            . "Not changing realm file.\n";
     }
 }
+
+if ($DBC->write_realm_file(%$RH_REALM_PARAMS,
+        SHARED  => $Opt{shared},
+        PASS    => $new,
+        )) {
+    print "Realm file successfully updated.\n";
+}
+else {
+    # probably won't ever get here, because write_realm_file() dies
+    # on error, but just in case behavior changes
+    die "WARNING: Realm file was not updated!\n";
+}
+
 test_realm();
 
 ######### END OF MAIN PROGRAM #########
@@ -142,13 +152,13 @@ sub change_password {
         $sql = "exec sp_password $qold, $qnew\n";
     }
     elsif ($dbd eq 'Oracle') {  # don't use standard quoting
-        $sql = qq{alter user $user identified by "$new"\n};
+        $sql = qq{alter user $user identified by "$new" replace "$old"};
     }
     elsif ($dbd eq 'Pg') {
-        $sql = "alter user $user password $qnew\n";
+        $sql = "alter user $user password $qnew";
     }
     elsif ($dbd eq 'mysql') {
-        $sql = "set password = password($qnew)\n";
+        $sql = "set password = password($qnew)";
     }
     else {
         die "I don't know the command to change password in '$dbd'\n";
