@@ -34,7 +34,7 @@ use vars qw(%Opt $DBC $RH_REALM_PARAMS);
 ######### BEGIN MAIN PROGRAM #########
 
 get_commandline_options();
-test_realm();
+test_realm() if !$Opt{local_only};
 
 my $user = $RH_REALM_PARAMS->{'USER'};
 print "Setting password for database user '$user'\n";
@@ -48,7 +48,7 @@ if ($new ne $new2) {
     die "New password entered two different ways; aborting.\n";
 }
 
-if (change_password($user,$old,$new)) {
+if ($Opt{local_only} || change_password($user,$old,$new)) {
     print "\nDatabase password successfully set.\n";
     if ($DBC->write_realm_file(%$RH_REALM_PARAMS,
             SHARED  => $Opt{shared},
@@ -62,11 +62,12 @@ if (change_password($user,$old,$new)) {
         die "WARNING: Realm file was not updated!\n";
     }
 }
+test_realm();
 
 ######### END OF MAIN PROGRAM #########
 
 sub get_commandline_options {
-    GetOptions(\%Opt, qw(dir=s help man realm=s shared usage version)
+    GetOptions(\%Opt, qw(dir=s help local_only man realm=s shared usage version)
         ) || pod2usage(1);
     if ($Opt{man}) {
         pod2usage(verbose => 2);
@@ -163,6 +164,14 @@ sub change_password {
 =head1 OPTIONS
 
 =over 4
+
+=item B<--local>
+
+Don't attempt to change password on server; just change realm file.  This is
+useful for changing realm files on additional systems, after you have already
+made the password change on the server.  Unlike the usual operation, it does
+not try to connect to the database before changing the password (but still does
+afterward).
 
 =item B<--realm> realm_name
 
