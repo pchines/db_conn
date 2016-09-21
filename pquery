@@ -1,8 +1,15 @@
 #!/usr/bin/perl -w -I/group/boehnke/lib/perl5
-# $Id: pquery.plx,v 1.1 2008/08/08 16:46:34 pchines Exp $
+
+eval 'exec /usr/bin/perl -w -I/group/boehnke/lib/perl5 -S $0 ${1+"$@"}'
+    if 0; # not running under some shell
+
+eval 'exec /usr/bin/perl -w -I/group/boehnke/lib/perl5 -S $0 ${1+"$@"}'
+    if 0; # not running under some shell
+# $Id: pquery.plx,v 1.37 2009-05-29 15:50:59 pchines Exp $
 
 use strict;
 use warnings;
+require 5.008;    # perl 5.8 or better needed for string IO
 use Getopt::Long;
 use Pod::Usage;
 use NHGRI::Db::Connector;
@@ -12,7 +19,7 @@ use Text::Balanced qw(extract_bracketed);
 
 # colon-separated search path (Always implicitly includes current directory)
 our $QUERY_SEARCH_PATH;
-do '/usr/local/etc/dbix_connector.cfg';
+do '/Users/pchines/Library/perl/dbix_connector.cfg';
 our $DEFAULT_SEARCH_PATH = '.:' . File::Spec->join($ENV{HOME}, "pquery")
     . ($QUERY_SEARCH_PATH ? ":$QUERY_SEARCH_PATH" : '');
 if ($ENV{PQUERY_PATH}) {
@@ -29,17 +36,21 @@ pquery.plx - run parameterized query with interactive prompts
 
 =head1 SYNOPSIS
 
-Parse and execute a parameterized query with interactive prompts:
+Parse and execute a parameterized query file with interactive prompts:
 
   pquery.plx query.psql > output.txt
 
-Parse query and save SQL to a file:
+Parse query template (stored in query path) and save SQL to a file:
 
   pquery.plx -noexec query > new.sql
 
-List all available queries in query path:
+Specify a query directly on the commandline:
 
-  pquery.plx -list
+  pquery.plx -e "select * from table" > table.txt
+
+List all [matching] queries in query path:
+
+  pquery.plx [-tidy] -list [match_expr]
 
 For complete documentation:
 
@@ -48,9 +59,9 @@ For complete documentation:
 =head1 DESCRIPTION
 
 This program will prompt users for values to fill in the parameters in the
-given query, then either return the processed query (if the --noexec option
-is specified) or execute the query and return the results in tab-delimited
-format.
+given query template, then either return the processed query (if the --noexec
+option is specified) or execute the query and return the results in
+tab-delimited format.
 
 Additional options allow specification of output formatting and the ability
 to provide the necessary parameter values via the commandline.
@@ -67,10 +78,14 @@ any other leading or trailing characters.
 =cut
 
 our %Opt;
-our $Dbc;
+our %BaseOpt;
+our %DefaultOpt;
+our %QfileOpt;
+our @OptionDefs;
 our $OutFh;
 our @ColumnFormat;
 our $ColumnCount;
+our $QueryFile;
 
 my $EMPTY = q{};
 my $COMMA = q{,};
@@ -81,11 +96,14 @@ my $SPACE = q{ };
 #------------
 
 process_commandline();
-if ($Opt{template}) {
-    write_template($ARGV[0]);
+scan_query($QueryFile);
+combine_option_values();
+
+if ($Opt{copy}) {
+    write_template($QueryFile);
     exit;
 }
-my $sql = eval_query($ARGV[0]);
+my $sql = eval_query($QueryFile);
 if ($Opt{sql}) {
     write_sql($sql);
 }
@@ -129,7 +147,7 @@ Please rewrite query to use expected syntax for removable "ANY" variables:
   OR table.column OP '$Opt{openbrace}$v$Opt{closebrace}'
 where 'OP' may be any one of =, !=, <=, >=, <>, < or >
 
-Alternatively, use the --template option to get a new copy of the query, and
+Alternatively, use the --copy option to get a new copy of the query, and
 remove the criteria that are not needed for your present query.  Or if
 possible, simply choose a value for the parameter that allows all rows.
 
@@ -151,7 +169,7 @@ END_WARNING
         # For select queries, apply limit, replacing any existing one
         if (defined $Opt{limit}) {
             $sql =~ s/\blimit\s+\d+(?:,\d+)\s*$//is;
-            $sql .= "\nlimit $Opt{limit}";
+            $sql .= "\nlimit $Opt{limit}\n";
         }
     }
     if ($Opt{strip_comments}) {
@@ -225,8 +243,8 @@ sub read_list {
             warn "No non-comment lines in '$file'; "
                 . "this will not produce a valid query\n";
         }
-        elsif ($Opt{debug}) {
-            warn sprintf("Read %d items from '%s'\n", scalar(@list), $file);
+        elsif ($Opt{verbose} > 1) {
+            warn sprintf("Read %d items from '$file'\n", scalar(@list), $file);
         }
         return \@list;
     }
@@ -239,13 +257,13 @@ sub read_list {
 sub prompt {
     my ($msg, $name, $def) = @_;
     if (defined $def) {
-        if ($Opt{debug}) {
+        if ($Opt{verbose} > 1) {
             $msg .= " [$name=$def]";
         }
         else {
             $msg .= " [$def]";
         }
-    } elsif ($Opt{debug}) {
+    } elsif ($Opt{verbose} > 1) {
         $msg .= " [$name=]";
 	}
     print STDERR $msg, $SPACE;
@@ -263,20 +281,53 @@ sub prompt {
     return $ans;
 }
 
-sub read_query {
+sub scan_query {
     my ($qfile) = @_;
-    my $file = find_file($qfile);
-    open QIN, $file or die "Can't read '$file', $!\n";
-    my (%var, $sql, $order);
+    local *QIN;
+    if ($Opt{execute}) {
+        my $query = $Opt{execute};
+        open QIN, "<", \$query;  # IO from string; requires perl >= 5.8
+    }
+    else {
+        my $file = find_file($qfile);
+        open QIN, $file or die "Can't read '$file', $!\n";
+    }
     while (<QIN>) {
         if (s/^##\s*//) {
             if (/^DefaultDb\s*:\s*(\w+)/) {
-                $Opt{dbc_realm} ||= $1;
-                $Dbc = NHGRI::Db::Connector->new(realm => $Opt{dbc_realm});
+                $DefaultOpt{dbc_realm} = $1;
             }
-            print STDERR;
+            print STDERR if $Opt{verbose};
         }
-        elsif (/^\#([:=])\s*    # '#=' for reg vars, '#:' for non-list vars
+        elsif (s/^#\|\s*//) {   # pipeline
+            chomp;
+            $DefaultOpt{pipeline} = "|$_" . ($DefaultOpt{pipeline} || $EMPTY);
+        }
+        elsif (s/^#-// && !$Opt{nooptions}) {       # Options
+            chomp;
+            @ARGV = split " ";
+            %QfileOpt = %BaseOpt;
+            if (!GetOptions(\%QfileOpt, @OptionDefs)) {
+                warn "Option definitions in psql file '$qfile' are invalid\n";
+            }
+        }
+    }
+}
+
+sub read_query {
+    my ($qfile) = @_;
+    local *QIN;
+    if ($Opt{execute}) {
+        my $query = $Opt{execute};
+        open QIN, "<", \$query;  # IO from string; requires perl >= 5.8
+    }
+    else {
+        my $file = find_file($qfile);
+        open QIN, $file or die "Can't read '$file', $!\n";
+    }
+    my (%var, $sql, $order);
+    while (<QIN>) {
+        if (/^\#([:=])\s*    # '#=' for reg vars, '#:' for non-list vars
                 (\w+)           # var name
                 \s*:\s*         # colon req'd
                 ([^\[]*)        # description (can't contain '[')
@@ -310,7 +361,7 @@ sub read_query {
             /gx);
     my $ra_missing = list_subtract(\@avars, \@evars);
     for my $v (@$ra_missing) {
-        if ($Opt{debug}) {
+        if ($Opt{debug} =~ /vars/) {
             warn "Variable '$v' is not defined, but is used in query\n";
         }
         $var{$v} ||= { name => $v, prompt => $v, order => ++$order };
@@ -318,20 +369,38 @@ sub read_query {
     # Don't bother to ask irrelevant questions
     my $ra_extra = list_subtract(\@evars, \@avars);
     for my $v (@$ra_extra) {
-        if ($Opt{debug}) {
+        if ($Opt{debug} =~ /vars/) {
             warn "Extra variable '$v' defined, but not used\n";
         }
         delete $var{$v};
     }
     # In debug mode, warn about missing default values
-    if ($Opt{debug}) {
-        for my $v (sort keys %var) {
-            if (!defined $var{$v}{default}) {
-                warn "No default value provided for variable '$v'\n";
-            }
+    if ($Opt{debug} =~ /vars/) {
+        for my $rh (sort { $a->{order} <=> $b->{order} } values %var) {
+            warn sprintf("%-16s %-.40s %s\n",
+                    "$rh->{name}:",
+                    etc($rh->{prompt}, 40),
+                    etc($rh->{default}, 10, '[', ']'),
+                    );
         }
     }
     return ($sql, \%var);
+}
+
+sub etc {
+    my ($string, $len, $op, $cl) = @_;
+    $len ||= 10;
+    $op  ||= "'";
+    $cl  ||= "'";
+    my $new = $EMPTY;
+    if (defined $string) {
+        $string =~ s/\s+$//;
+        if (length($string) > $len) {
+            $string = substr($string, 0, $len-3) . "...";
+        }
+        $new = $op. $string . $cl;
+    }
+    return $new;
 }
 
 sub list_subtract {
@@ -359,15 +428,17 @@ sub write_template {
         }
         $tmpl =~ s/^#=\s*$v\s*:.*\n//mg;
     }
-    print $OutFh $tmpl;
+    my $fh = get_fh();
+    print $fh $tmpl;
 }
 
 sub write_sql {
     my ($sql) = @_;
-    if ($Opt{prefix_sql}) {
-        $sql =~ s/^/$Opt{prefix_sql}/mg;
+    my $fh = get_fh();
+    if ($Opt{prefix_for_sql}) {
+        $sql =~ s/^/$Opt{prefix_for_sql}/mg;
         my @t = localtime();
-        printf $OutFh "$Opt{prefix_sql}/* Query executed at "
+        printf $fh "$Opt{prefix_for_sql}/* Query executed at "
             . "%d-%02d-%02d %d:%02d:%02d in realm '%s' */\n",
             $t[5]+1900, $t[4]+1, $t[3], $t[2], $t[1], $t[0],
             $Opt{dbc_realm} || $DEFAULT_REALM;
@@ -375,33 +446,41 @@ sub write_sql {
     if ($Opt{strip_comments}) {
         $sql =~ s{/\*.*\*/}{}xismg;
     }
-    print $OutFh $sql;
+    chomp $sql;
+    $sql .= "\n";
+    print $fh $sql;
 }
 
 sub write_results {
     my ($sql, $ofile) = @_;
+    my $Dbc = NHGRI::Db::Connector->new(
+                realm => $Opt{dbc_realm} || $DEFAULT_REALM );
     my $dbh = $Dbc->connect();
     $dbh->{PrintError} = 0;
     $dbh->{RaiseError} = 1;
     $dbh->{ShowErrorStatement} = 1;
     $dbh->{FetchHashKeyName} = $Opt{lowercase} ? 'NAME_lc' : 'NAME';
     $dbh->{mysql_use_result} = 1;
-    if ($Opt{debug} > 1) {
+    if ($Opt{debug} =~ /explain/ && $dbh->{Driver}{Name} eq 'mysql') {
         $sql =~ s/^\s*create.*?view\s+\w+\s+(?:\([^\)]*\)\s+)?as//is;
         $sql =~ s/^\s*select/explain select/i;
     }
+    my $fh = get_fh();
     my $sth = $dbh->prepare($sql);
-    $sth->execute();
+    my $rows = $sth->execute();
     my $ra_cols = $Opt{lowercase} ? $sth->{NAME_lc} : $sth->{NAME};
     if ($ra_cols) { # non-select statements may not have output columns
         column_formats_from_options($ra_cols);
-		$Opt{plain} || print $OutFh join($Opt{delimiter}, @$ra_cols), "\n";
+		$Opt{plain} || print $fh join($Opt{delimiter}, @$ra_cols), "\n";
         my $ra;
         while ($ra = $sth->fetchrow_arrayref()) {
-            print $OutFh join($Opt{delimiter}, 
+            print $fh join($Opt{delimiter}, 
                     map { format_value($ra->[$_], $_) } (0..(@$ra_cols-1))
                     ), "\n";
         }
+    }
+    elsif ($rows >= 0) {
+        warn(($rows+0) . " rows affected\n");
     }
 }
 
@@ -461,7 +540,7 @@ END_WARNING
             $ColumnFormat[$i] = $Opt{column_format}{$ra_cols->[$i]};
         }
     }
-    if ($Opt{debug}) {
+    if ($Opt{verbose}) {
         my %wanted;
         @wanted{@$ra_cols} = ();
         my @not_wanted = grep { !exists $wanted{$_} }
@@ -526,12 +605,12 @@ sub find_file {
     if ($path) {
         die "File '$name' does not exist\n";
     }
-    my @dirs = split /:/, $Opt{path};
+    my @dirs = split /:/, ($Opt{path} || $DefaultOpt{path});
     if (!in_list('.', @dirs)) {
         unshift @dirs, '.';
     }
     for my $d (@dirs) {
-        my @exts = split /\|/, $Opt{extension};
+        my @exts = split /\|/, ($Opt{extension} || $DefaultOpt{extension});
         for my $ext ($EMPTY, @exts) {
             $ext = ".$ext" if $ext;
             my $file = File::Spec->join($d, $name.$ext);
@@ -556,24 +635,26 @@ sub in_list {
 }
 
 sub list_queries {
+    my ($match) = @_;
     my $found;
     if ($Opt{path}) {
-        my @cols = split /[,:]/, $Opt{list};
-        if (!@cols) {
-            @cols = qw(query title);
-        }
-        print join($Opt{delimiter}, @cols), "\n";
+        my $fh = get_fh();
+        my @cols = qw(query title);
+        print $fh join($Opt{delimiter}, @cols), "\n";
         my @dirs = split /:/, $Opt{path};
         for my $d (@dirs) {
             opendir DIR, $d or next;
             my @files = grep { /\.($Opt{extension})$/ } readdir(DIR);
             for my $f (@files) {
+                if ($match && $f !~ /$match/) {
+                    next;
+                }
                 my %info = get_info($d,$f);
                 $f =~ s/\.($Opt{extension})$//;
                 $info{query} = $f;
                 $info{dir} = $d;
-                print join($Opt{delimiter}, map { $info{$_}||$EMPTY } @cols),
-                    "\n";
+                print $fh join($Opt{delimiter},
+                        map { $info{$_}||$EMPTY } @cols), "\n";
                 ++$found;
             }
         }
@@ -605,34 +686,117 @@ sub get_info {
     return %info;
 }
 
+sub get_fh {
+    if (!$OutFh) {
+        if ($Opt{pipeline} && !$Opt{nopipeline}) {
+            my $dest = $Opt{output} eq '-' ? $EMPTY : "> $Opt{output}";
+            $OutFh = IO::File->new("$Opt{pipeline} $dest");
+        }
+        else {
+            $OutFh = IO::File->new(">$Opt{output}");
+        }
+    }
+    return $OutFh
+}
+
 sub process_commandline {
-    %Opt = (closebrace  => '}',
-            debug       => 0,
+    %BaseOpt = (
+            var         => {},
+            verbose     => 1,
+            );
+    %DefaultOpt = (
+            closebrace  => '}',
             delimiter   => "\t",
             extension   => 'psql',
             null        => $EMPTY,
             openbrace   => '{',
             output      => '-',
             path        => $DEFAULT_SEARCH_PATH,
-            prefix_sql  => $EMPTY,
+            prefix_for_sql  => $EMPTY,
             var         => {},
+            verbose     => 1,
             );
-    GetOptions(\%Opt, qw(closebrace=s
-                dbc_realm|realm=s debug+ defaults delimiter=s
-                extension=s format=s limit=i list|l:s lowercase|lc
-                manual noexecute|n null=s openbrace=s output|o=s
-                path=s plain prefix_sql=s region|r=s
-                sql strip_comments template var|v=s
-                help version)
-            ) || pod2usage(0);
+    %Opt = %BaseOpt;
+
+    @OptionDefs = qw(closebrace=s copy|c
+                dbc_realm|realm=s debug:s defaults delimiter=s
+                execute|e=s extension=s format=s
+                limit=i list|ls|l:s lowercase|lc
+                manual noexecute|n nooptions nopipeline null=s
+                openbrace=s output|o=s
+                path=s pipeline=s plain|noheader prefix_for_sql=s
+                quiet region|r=s
+                sql strip_comments template tidy var|v=s wordy
+                help+ version);
+    GetOptions(\%Opt, @OptionDefs) || pod2usage(0);
     if ($Opt{manual})  { pod2usage(verbose => 2); }
-    if ($Opt{help})    { pod2usage(0); }
-    if ($Opt{version}) { die "pquery.plx, ", q$Revision: 1.1 $, "\n"; }
+    if ($Opt{help})    { pod2usage(verbose => $Opt{help}-1); }
+    if ($Opt{version}) { die "pquery.plx, ", q$Revision: 1.37 $, "\n"; }
+    if (defined $Opt{debug}) {
+        if ($Opt{debug} =~ /all/i || !$Opt{debug}) {
+            $Opt{debug} = "vars,explain";
+        }
+    }
+    else {
+        $Opt{debug} = $EMPTY;
+    }
     if (defined $Opt{list}) {
-        list_queries();
+        $Opt{list} ||= '.';
+        combine_option_values();
+        list_queries($Opt{list});
         exit;
     }
-    pod2usage("One and only one query file must be provided") if @ARGV != 1;
+    # Treat var=value arguments as parameter assignments
+    my @a = @ARGV;
+    @ARGV = ();
+    for (my $i = 0; $i < @a; ++$i) {
+        if ($a[$i] =~ /(\w+)=(.*)/) {
+            if ($2 eq '@') {
+                $Opt{var}{$1} = "@".$a[$i+1];
+                ++$i;
+            }
+            else {
+                $Opt{var}{$1} = $2;
+            }
+        }
+        else {
+            push @ARGV, $a[$i];
+        }
+    }
+    if (!@ARGV && !$Opt{execute}) {
+        pod2usage("A query must be provided, either as a file, a template "
+                . "name, or directly\non the commandline using the -exec "
+                . "option");
+    }
+    elsif (@ARGV > 1 || (@ARGV && $Opt{execute})) {
+        pod2usage("At present, only one query template at a time may be "
+                . "provided, and each\nmay contain only one SQL statement");
+    }
+    $QueryFile = $ARGV[0];
+    if ($Opt{template}) {
+        $Opt{copy} = 1;
+        warn "The -template option is deprecated; please use -copy instead\n";
+    }
+    assign_option_values();
+}
+
+sub combine_option_values {
+    %Opt = (%DefaultOpt, %QfileOpt, %Opt);
+    for my $k (keys %{ $QfileOpt{var} }) {
+        if (!exists $Opt{var}{$k}) {
+            $Opt{var}{$k} = $QfileOpt{var}{$k};
+        }
+    }
+    assign_option_values();
+}
+
+sub assign_option_values {
+    if ($Opt{wordy} || $Opt{debug}) {
+        ++$Opt{verbose};
+    }
+    if ($Opt{quiet}) {
+        $Opt{verbose} = 0;
+    }
     if ($Opt{format}) {
         my @f = split /[,:]/, $Opt{format};
         my $err = 0;
@@ -649,6 +813,7 @@ sub process_commandline {
             }
         }
         die "\n" if $err;
+        delete $Opt{format};
     }
     if ($Opt{region}) {
         if ($Opt{region} =~ /^$ANY$/i) {
@@ -692,26 +857,33 @@ sub process_commandline {
                     . "should be chrom:start-end\n");
         }
     }
-    $OutFh = IO::File->new(">$Opt{output}");
     if ($Opt{sql} && !$Opt{noexecute}) {
-        $Opt{prefix_sql} ||= "# ";
+        $Opt{prefix_for_sql} ||= "# ";
     }
-    if ($Opt{template}) {
+    if ($Opt{copy}) {
         $Opt{noexecute} = 1;
     }
     if ($Opt{noexecute}) {
         $Opt{sql} = 1;
     }
-    else {
-        # Doing this here allows us to fail quickly if realm is wrong
-        $Dbc = NHGRI::Db::Connector->new(
-                realm => $Opt{dbc_realm} || $DEFAULT_REALM );
+    if ($Opt{pipeline} && $Opt{pipeline} !~ /^\|/) {
+        $Opt{pipeline} = "|$Opt{pipeline}";
+    }
+    if ($Opt{tidy}) {
+        $Opt{pipeline} .= "| delim2fixed";
     }
 }
 
 =head1 OPTIONS
 
 =over 4
+
+=item B<--copy>
+
+Return a copy of the pquery template.  This is useful when you want to modify
+an existing pquery to make a new one.  Templates are returned verbatim,
+except that parameters specified with the C<--var> option are substituted,
+optionally creating a pquery with fewer parameters.
 
 =item B<--dbc_realm> realm
 
@@ -720,12 +892,20 @@ sub process_commandline {
 Specify a realm to use; defaults to 'results' or the DefaultDb referenced in
 the psql file header.  See L<FILES>.
 
-=item B<--debug>
+=item B<--debug> vars
 
-Output additional information, including variable names (perhaps useful for
-constructing shell scripts or new query templates).  When C<--debug> is
-applied twice, select queries will be explain-ed, rather than executed (this
-feature only works with MySQL).
+List parameter names and output warnings to help identify misspelled parameter
+names, and other common problems with variable definition.
+
+=item B<--debug> explain
+
+Select queries will be explain-ed, rather than executed (this feature only
+works with MySQL, so far).
+
+=item B<--debug> vars,explain
+
+Multiple output modes can be combined.  This is also the default when no mode
+is specified.
 
 =item B<--defaults>
 
@@ -767,12 +947,11 @@ Limit output to the first N lines.
 
 =item B<--list>
 
-=item B<--list> field1,field2
+List all queries in PQUERY_PATH search path.
 
-List all available queries.  If field names are provided, the specified
-information will be extracted from each file.  If no fields are specified,
-'query' (the name of the query) and 'title' (a short description) will be
-reported.  All fields should be specified in lowercase.
+=item B<--list> match_expr
+
+List all queries that match the regular expression C<match_expr>.
 
 =item B<--lowercase>
 
@@ -784,6 +963,14 @@ DBMS, which may or may not be the case specified in the query.
 =item B<--noexecute>
 
 Do not run query, just show the SQL that is produced.
+
+=item B<--nooptions>
+
+Ignore options specified in query file.
+
+=item B<--nopipeline>
+
+Do not pipe output through any pipelines.
 
 =item B<--null> NULL
 
@@ -798,6 +985,15 @@ Send output to the specified file.  Defaults to STDOUT.
 
 Specify paths to be searched.
 
+=item B<--pipeline> "shell command to pipe output through"
+
+Pipe output from pquery (including headers and comments) through the specified
+command.  See also C<--nopipeline>; C<--nopipeline> will skip pipelines
+specified using the C<--pipeline> option, as well as those specified in query
+file.  Commandline specified pipelines will happen I<before> those specified in
+the query file.  To replace those in the query file with others, use
+C<--nopipeline> in combination with a regular shell pipeline.
+
 =item B<--plain>
 
 Omit the header line when returning results.
@@ -807,7 +1003,7 @@ Omit the header line when returning results.
 =item B<--region> ANY
 
 Specify a region on a chromosome, bounded by a start and end position.
-The special value 'ANY' replaces all instances of variables Chr, Chrom,
+The special value 'ANY' replaces all instances of parameters Chr, Chrom,
 ChrStart and ChrEnd with 'ANY', making the query apply to all regions
 across the entire genome (note this can result in long run times and/or
 large result sets).  See L<Excludable Conditions>.
@@ -826,12 +1022,13 @@ Strip all C-style comments out of SQL, for database engines that don't
 support this type of comment.  By default, C-style comments, including the
 specialized ones that pquery.plx uses for formatting, are retained.
 
-=item B<--template>
+=item B<--tidy>
 
-Return the pquery template.  This is useful when you want to modify an
-existing pquery template to make a new one.  Templates are returned verbatim,
-except that variables specified with the C<--var> option are substituted,
-optionally creating a pquery with fewer variables.
+Pipe output through C<delim2fixed> program.  The program is run with default
+options (and so this option does not work well if alternative delimiters are
+specified, or the data are first piped through other programs that
+significantly change the format of the data).  For more complex situations, use
+the C<--pipeline> option, or an actual shell pipeline.
 
 =item B<--var> VariableName=VALUE[,VALUE2...]
 
@@ -839,15 +1036,15 @@ optionally creating a pquery with fewer variables.
 
 =item B<-v>    VariableName=VALUE
 
-Pre-specify values for a variable, so that the program does not prompt you
-for them.  May be used multiple times to set several variables, e.g.
+Pre-specify values for a parameters, so that the program does not prompt you
+for them.  May be used multiple times to set several parameters, e.g.
 
     pquery -v MaxPval=.001 -v Table=t2d_s1_typed_v query.psql
 
-Often used in combination with C<--defaults>, to leave other variables
-unchanged, or with C<--template>, to create a template with fewer parameters.
+Often used in combination with C<--defaults>, to leave other parameters
+unchanged, or with C<--copy>, to create a template with fewer parameters.
 
-Note that certain variables may be replaced with multiple values, either read
+Note that certain parameters may be replaced with multiple values, either read
 from a file where each value is listed on a separate line, or specified in a
 comma-delimited list.  See L<List-Replaceable Parameters> for more details.
 For such list-replaceable variables, you may specify a path to a file to read
@@ -859,8 +1056,29 @@ Or simply enumerate the values, separating them with a comma:
 
     pquery -v "SnpName=value1,value2" query.psql
 
-Note that you must use quotes around the entire variable assignment, as shown
+Note that you must use quotes around the entire parameter assignment, as shown
 above, if any of the values contain spaces.
+
+Because assigning parameter values on the commandline is a very common thing to
+do, we have also provided an alternative syntax: the C<--var> itself is
+optional.  Arguments that contain equals signs ("=") are interpreted as
+variable assignments, e.g.
+
+    pquery SnpName=rs5400,rs6500 query.psql
+
+To make it possible to easily use filename completion, the filename may be
+separated from the at symbol ("@") by a space:
+
+    pquery SnpName=@ /path/to/snp.list query
+
+Note that this separation between the at symbol and list of values does B<not>
+work when using the explicit C<-v> or C<--var> option.
+
+=item B<--wordy>
+
+Turn on verbose output options, including displaying parameter names, and
+indicating the number of values read from list files.  The parameter names
+may perhaps be useful for constructing shell scripts or new query templates.
 
 =item B<--help>
 
@@ -872,7 +1090,88 @@ Display complete documentation, including all options.
 
 =back
 
-=head1 FILES
+=head1 USING PQUERY INTERACTIVELY
+
+=head2 Choosing a Query
+
+The pquery program must be given a query template to work with.  This query
+template file may be specified either by providing a full path to the file,
+or by providing the base name of a template in the library (i.e. a file in
+one of the directories in PQUERY_PATH.  See L<ENVIRONMENT VARIABLES> below.)
+
+B<Full Path>: If you have a query template file, you can simply run:
+
+    pquery.plx /path/to/template.psql
+
+In this case, the template file need not have a .psql extension.
+
+B<Library>: You must first know the name of the query you wish to run.  You
+can obtain a list of the queries available by running:
+
+    pquery.plx --list
+
+Because the length of query names and titles varies, this list is often
+greatly improved by using the -tidy option and piping the results through
+a paging program:
+
+    pquery.plx --tidy --list | less -S
+
+Typical results would be:
+
+    query        title
+    first_query  What this query does
+    second_query This one does something else
+
+Once you've selected a query, you can run it simply by providing:
+
+    pquery.plx second_query
+
+Although the library queries must have .psql extensions, you should not include
+the extension when providing the name of the query.
+
+=head2 Providing Parameter Values
+
+In either case, whether the template is in a local file or in a library, you
+will be prompted for each parameter that requires a value.  The prompt for
+each parameter will include a default value in square brackets, if the query
+writer has provided one, e.g.
+
+    Trait? [bmi]
+
+To accept the default value ("bmi" in the example above), simply press
+return.  To supply a different value, enter that value and press return.
+
+In some cases, a parameter may be able to accept multiple values.  You can
+provide multiple values by separating them with commas.  If you want to
+include a literal comma in the value, you must escape it by preceding it with
+a backslash.  You may also instruct pquery to read a list of values from a
+file by preceding the path to the file with an @ sign, for example, to read
+the list of traits from a file called my_traits.txt:
+
+    Trait? [bmi] @my_traits.txt
+
+Not all parameters can take multiple values; you will receive an error
+message if you supply multiple values and the query does not support them.
+
+See the L<OPTIONS> for commandline options for controlling the output that
+pquery produces.
+
+=head1 SCRIPTING AND SETTING VARIABLES ON THE COMMANDLINE
+
+Values for parameters may be set on the commandline using the C<--var>
+option, or allowed to take default values using the C<--default> option.
+These options may be combined, so that you can accept most of the defaults,
+and supply only those that have no default, or where you wish to override
+the default value.
+
+You may also supply multiple values on the commandline, either by separating
+them with commas or by using the @ prefix:
+
+    pquery.plx -v Trait=bmi,whr second_query
+
+    pquery.plx -v Trait=@my_traits.txt second_query
+
+=head1 CREATING QUERY TEMPLATES
 
 The parameterized SQL query files that this script reads are a variation on
 regular SQL, therefore, in the simple case, a file containing an ordinary SQL
@@ -889,7 +1188,7 @@ Query files typically have a '.psql' extension because they are
 'Parameterized SQL' files.  The format calls for replaceable parameters to be
 identified by surrounding the placeholder name with curly brackets, e.g.
 
-    select count(*) from my_table where rsquare > {CutoffValue}
+    select count(*) from my_table where rsquare >= {CutoffValue}
 
 Any part of the query may be replaced by a placeholder, including table and
 column names.  When this is done, it is best to use an alias to allow the
@@ -916,7 +1215,7 @@ any one of which will satisfy the query.  This is useful, for example, if you
 want to obtain query results for several different values, without running
 the query separately for each value.
 
-In order to qualify as a list-repleaceable parameter, the parameter must be
+In order to qualify as a list-replaceable parameter, the parameter must be
 used only on the right hand side of an equality condition, such as
 
     expression = {VariableName}  OR  expression = "{VariableName}"
@@ -992,7 +1291,7 @@ file is parsed; this behavior may change in the future.  For example:
 
     ## Title: Find QT trends supported by T2D assoc in same gene
     ## Author: Peter Chines
-    ## $Date: 2008/08/08 16:46:34 $
+    ## $Date: 2009-05-29 15:50:59 $
 
 One special metadata header is C<DefaultDb>.  This header specifies the
 database realm to use to run the query, in the absence of an explicit
@@ -1020,8 +1319,21 @@ descriptive, and no default is provided, e.g.
 
     PvalueField?
 
-Note that under debug mode, these prompts are different; see
-L<DEBUGGING QUERIES>.
+Note that in "wordy" (verbose) mode, these prompts are different; they
+include the name of the variable being assigned; this can sometimes be
+helpful, for example when you are planning to automate a process and want to
+provide some of the parameters on the command line.  For example, this
+parameter definition:
+
+    #= PvalueField: p-value field to use [p_mul]
+
+will result in the following prompt:
+
+    p-value field to use? [PvalueField=p_mul]
+
+Where no default value is provided, the parameter name still appears:
+
+    p-value field to use? [PvalueField=]
 
 Variable definitions that begin with a hash mark followed by a colon (#:) are
 similar, except that these variables are declared by the query author to be
@@ -1030,6 +1342,23 @@ L<Excludable Conditions>, above).  Thus, the special treatment for commas and
 for the value 'ANY' will not apply to such variables.  Unless you expect your
 data columns to contain commas or the value 'ANY', it is generally not 
 desirable to use the "#:" declaration; use "#=" instead.
+
+B<Pipelines>: Lines that begin with a hash mark followed by a pipe (#|) specify
+commands to be performed on the output before it is sent to it's final
+destination.  You may define as many different pipelines as you like, and the
+output will be sent through each in order.  For example:
+
+    #| select_one.plx -u 1
+    #| delim2fixed -box
+
+B<Default Options>: Lines that begin with a hash mark followed by a dash (#-)
+specify the default options to be provided to pquery.  For example:
+
+    #- -limit 5
+
+These options will be overridden if the same option is provided on the
+commandline.  If the C<-nooptions> option is provided on the commandline, the
+options specified in the query file will be ignored.
 
 =head2 Column Formatting
 
@@ -1057,14 +1386,16 @@ C<~/pquery> in the user's home directory.
 
 =head1 DEBUGGING QUERIES
 
-Currently, two levels of debugging are available; specifying C<--debug> once
-or twice determines the level of debugging activated.  These debug modes are
-intended to be useful both for query authors and for those who wish to use
-parameterized queries in scripts.
+There are several debug modes, intended to be useful for query authors.  These
+modes may be combined by specifying more than one separated by commas, e.g.
 
-=head2 Debug Mode 1
+    -debug vars,explain
 
-In debug mode, warnings are issued for:
+If C<-debug> is used without any mode name, the assumed modes are
+C<vars,explain>.
+
+In B<vars> debug mode, all variable names are listed and warnings are issued
+for:
 
 =over 4
 
@@ -1076,26 +1407,11 @@ In debug mode, warnings are issued for:
 
 =back
 
-In addition parameter prompts in Debug mode include the actual names of the
-parameters, e.g. this parameter definition
-
-    #= PvalueField: p-value field to use [p_mul]
-
-will result in the following prompt:
-
-    p-value field to use? [PvalueField=p_mul]
-
-Where no default value is provided, the parameter name still appears:
-
-    p-value field to use? [PvalueField=]
-
-=head2 Debug Mode 2
-
-In addition to all of the features described for Debug Mode 1, in this mode,
-MySQL SELECT queries (and CREATE VIEW queries) are not actually executed.
-Instead, pquery issues an "explain" query, so that the results are the query
-plan.  This is a good way to check queries that run much slower than you
-think they should (assuming that you know how to interpret the output).
+In B<explain> debug mode, MySQL SELECT queries (and CREATE VIEW queries) are not
+actually executed.  Instead, pquery issues an "explain" query, so that the
+results are the query plan.  This is a good way to check queries that run much
+slower than you think they should (assuming that you know how to interpret the
+output).
 
 In the future, this functionality may be extended to other DBMS, but for now,
 this works only with MySQL.
@@ -1104,7 +1420,7 @@ this works only with MySQL.
 
 =over 4
 
-=item * Separate query-user documentation from query-author documentation?
+=item * Separate pquery-user documentation from query-author documentation?
 
 =item * Add support for "not in" queries
 
@@ -1114,7 +1430,7 @@ directly and populating them.
 
 =item * Should List-Replaceable Parameters be specially recognized?
 
---debug mode could identify variables that are list-replaceable; what is best
+--wordy mode could identify variables that are list-replaceable; what is best
 way to do this?
 
 =item * Allow multiple statements in query file
@@ -1129,7 +1445,7 @@ these with negative lookbehind regexp C<(?<!\\)>?
 
 =item * Some parameters should be limited to selection from a list
 
-This could be a different type of variable definition C<#:>, perhaps with
+This could be a different type of variable definition C<#?>, perhaps with
 an embedded query to extract choices from database?
 
 =item * Allow parameter value to trigger inclusion of more SQL
@@ -1147,7 +1463,7 @@ This might be worth worrying about, someday.
 
  Peter Chines - pchines@mail.nih.gov
 
- based on many ideas and suggestions by Randall Pruim - rpruim@calvin.edu
+ thanks to Randall Pruim - rpruim@calvin.edu for many ideas and suggestions
 
 =head1 LEGAL
 
