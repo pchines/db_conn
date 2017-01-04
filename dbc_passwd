@@ -142,7 +142,7 @@ sub change_password {
         $sql = "exec sp_password $qold, $qnew\n";
     }
     elsif ($dbd eq 'Oracle') {  # don't use standard quoting
-        $sql = qq{alter user $user identified by "$new"\n};
+        $sql = qq{alter user $user identified by "$new" replace "$old"\n};
     }
     elsif ($dbd eq 'Pg') {
         $sql = "alter user $user password $qnew\n";
