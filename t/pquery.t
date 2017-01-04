@@ -23,11 +23,11 @@ my $test_data = 't/test_data.txt';
 my $cmd = "perl -w pquery";
 my $out;
 like get_test_output("$cmd -h"), qr/usage/i, "help";
-like get_test_output($cmd), qr/one.+query file/i, "need a query";
+like get_test_output($cmd), qr/query must be provided/i, "need a query";
 like get_test_output("$cmd -path t -list"), qr/no matching query files/i,
     "no queries found";
 
-like get_test_output("podchecker pquery.plx"), qr/OK\.\n$/, "POD ok";
+like get_test_output("podchecker pquery"), qr/OK\.\n$/, "POD ok";
 
 my $sql = "select count(*) from information_schema.tables;";
 $out = get_test_output("$cmd -n", << "END_QUERY");
@@ -44,9 +44,9 @@ select snp, pvalue /*%.5f*/
  where pvalue <= {Pvalue} and trait = '{Trait}'
 END_QUERY
 
-$out = get_test_output("$cmd -template", $pquery);
+$out = get_test_output("$cmd -copy", $pquery);
 is $out, $pquery, "returns template";
-$out = get_test_output("$cmd -template -v Trait=bmi", $pquery);
+$out = get_test_output("$cmd -copy -v Trait=bmi", $pquery);
 is $out, << "END_TEMPLATE", "returns template with -var replacement";
 #= Pvalue : p-value [.05]
 select snp, pvalue /*%.5f*/
@@ -56,6 +56,7 @@ END_TEMPLATE
 $out = get_test_output("$cmd -template -v Trait=\@$test_data", $pquery);
 $out =~ s/\s$/\n/;
 is $out, << "END_TEMPLATE", "returns template with list replacement";
+The -template option is deprecated; please use -copy instead
 #= Pvalue : p-value [.05]
 select snp, pvalue /*%.5f*/
   from results
@@ -79,13 +80,13 @@ is $out, "select snp, pvalue /*%.5f*/\n  from results\n"
 $out = get_test_output("$cmd -n -v Pvalue=.1 -v Trait=\@$test_data",
         $pquery);
 is $out, "select snp, pvalue /*%.5f*/\n  from results\n"
-    . " where pvalue <= .1 and trait in ('bmi','hdl','ldl') ",
+    . " where pvalue <= .1 and trait in ('bmi','hdl','ldl') \n",
     "param query commandline list vars from file";
 
 $out = get_test_output("$cmd -n -v Pvalue=.1 -v Trait=bmi,chol,whr",
         $pquery);
 is $out, "select snp, pvalue /*%.5f*/\n  from results\n"
-    . " where pvalue <= .1 and trait in ('bmi','chol','whr') ",
+    . " where pvalue <= .1 and trait in ('bmi','chol','whr') \n",
     "param query commandline list vars comma";
 
 my $pq1 = $pquery;
@@ -100,17 +101,16 @@ $out = get_test_output("$cmd -n -v Pvalue=.1 -v Trait=@/dev/null",
 is $out, "No non-comment lines in '/dev/null'; "
     . "this will not produce a valid query\n"
     . "select snp, pvalue /*%.5f*/\n  from results\n"
-    . " where pvalue <= .1 and trait in () ",
+    . " where pvalue <= .1 and trait in () \n",
     "param query commandline null list";
 
 my $pq2 = $pquery . "and (trait = '{Trait}')";
-$out = get_test_output("$cmd -n -debug -v Pvalue=.1 -v Trait=\@$test_data",
+$out = get_test_output("$cmd -n -v Pvalue=.1 -v Trait=\@$test_data",
         $pq2);
-is $out, "Read 3 items from '$test_data'\n"
-    . "select snp, pvalue /*%.5f*/\n  from results\n"
+is $out, "select snp, pvalue /*%.5f*/\n  from results\n"
     . " where pvalue <= .1 and trait in ('bmi','hdl','ldl') "
-    . "and (trait in ('bmi','hdl','ldl') )",
-    "param query with two list replacements (debug mode)";
+    . "and (trait in ('bmi','hdl','ldl') )\n",
+    "param query with two list replacements";
 
 $out = get_test_output("$cmd -n -v Pvalue=ANY -v Trait=ANY", $pq1);
 is $out, "select snp, pvalue /*%.5f*/\n  from results\n"
@@ -141,7 +141,7 @@ $out = get_test_output(
         "$cmd -n -v Chr=13 -v ChrStart=10.123kb -v ChrEnd=.05mb -limit 5",
         $pquery);
 is $out, "Printed comments\nselect snp from snp_pos where chr = 13\n"
-    . "and pos >= 10123 and pos <= 50000\n\nlimit 5",
+    . "and pos >= 10123 and pos <= 50000\n\nlimit 5\n",
     "substitutions with kb/mb modifiers, limit";
 
 $out = get_test_output(
