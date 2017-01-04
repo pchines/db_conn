@@ -20,7 +20,7 @@ if ($@) {
 }
 
 my $test_data = 't/test_data.txt';
-my $cmd = "perl -w pquery.plx";
+my $cmd = "perl -w pquery";
 my $out;
 like get_test_output("$cmd -h"), qr/usage/i, "help";
 like get_test_output($cmd), qr/one.+query file/i, "need a query";

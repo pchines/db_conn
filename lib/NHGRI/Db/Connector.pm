@@ -16,7 +16,7 @@ eval q{
     $USE_READKEY = 1;
 };
 
-$VERSION = '0.81';
+$VERSION = '0.82';
 @ISA = qw(Exporter);
 @EXPORT_OK = qw(ask ask_pass);
 @PARAMS = qw(DBD SERVER USER PASS DATABASE);

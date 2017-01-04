@@ -1,5 +1,7 @@
 Revision history for Perl extension NHGRI::Db::Connector.
 
+0.82  Wed Sep 21 13:18:55 EDT 2016
+    - add newest version of pquery executable
 0.81  Sat Jan 26 14:59:59 EST 2013
     - move to git version control
     - rename module from DBIx::Connector to NHGRI::Db::Connector, since the

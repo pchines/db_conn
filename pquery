@@ -19,7 +19,7 @@ use Text::Balanced qw(extract_bracketed);
 
 # colon-separated search path (Always implicitly includes current directory)
 our $QUERY_SEARCH_PATH;
-do '/Users/pchines/Library/perl/dbix_connector.cfg';
+do '/usr/local/share/db_connector.cfg';
 our $DEFAULT_SEARCH_PATH = '.:' . File::Spec->join($ENV{HOME}, "pquery")
     . ($QUERY_SEARCH_PATH ? ":$QUERY_SEARCH_PATH" : '');
 if ($ENV{PQUERY_PATH}) {

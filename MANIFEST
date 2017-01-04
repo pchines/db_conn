@@ -5,7 +5,7 @@ lib/NHGRI/Db/Connector.pm
 MANIFEST
 MANIFEST.SKIP
 Makefile.PL
-#pquery.plx
+pquery
 README
 samples/mysql
 samples/oracle
@@ -14,7 +14,7 @@ samples/sybase
 t/dbc_passwd.t
 t/dbc_realm.t
 t/disconnect.t
-#t/pquery.t
+t/pquery.t
 t/test_data.txt
 t/test_realm.t
 t/write.t

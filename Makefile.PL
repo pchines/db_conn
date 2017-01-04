@@ -16,7 +16,7 @@ $main::TEST_REALM_LIVE = $main::TEST_REALM_FILE . ".live";
 $main::SH_REGEX = q{^(\s*\$SHARED_CONNECTION_DIR\s*=\s*)'(.*?)'\s*;\s*$};
 $main::PR_REGEX = q{^(\s*\$PRIVATE_SUBDIR_IN_HOME\s*=\s*)'(.*?)'\s*;\s*$};
 $main::PQ_REGEX = q{^(\s*\$QUERY_SEARCH_PATH\s*=\s*)'(.*?)'\s*;\s*$};
-$main::PQ_FILE = 'pquery.plx';
+$main::PQ_FILE = 'pquery';
 
 # Set Module defaults
 print << "INTRO";
@@ -31,11 +31,11 @@ INTRO
 $main::CONFIG_PATH = get_config_path();
 create_local_config();
 set_config_path($main::CONFIG_PATH, $main::MODULE_FILE);
-#set_config_path($main::CONFIG_PATH, $main::PQ_FILE);
+set_config_path($main::CONFIG_PATH, $main::PQ_FILE);
 $main::PUB_DIR = get_shared_dir();
 my $priv_dir   = get_private_dir();
 # TODO: remove pquery?
-#$main::PQ_PATH = get_query_dir();
+$main::PQ_PATH = get_query_dir();
 set_connection_dirs($main::PUB_DIR, $priv_dir, $main::PQ_PATH);
 
 # Create a default realm file for testing
@@ -80,7 +80,7 @@ WriteMakefile(
             DBI             => 1.0,
 #            'Text::Balanced'=> 0,  # needed for pquery only
             },
-    'EXE_FILES'    => [qw(dbc_realm dbc_passwd)],
+    'EXE_FILES'    => [qw(dbc_realm dbc_passwd pquery)],
     'AUTHOR'       => 'Peter Chines <pchines@mail.nih.gov>',
     'ABSTRACT_FROM'=> $main::MODULE_FILE,
     'LICENSE'      => 'perl',
@@ -177,14 +177,13 @@ DEFAULT_CONFIG
 $PRIVATE_SUBDIR_IN_HOME = '.db_connections';
 DEFAULT_CONFIG
     }
-# TODO: remove pquery?
-#    if ($config !~ /$main::PQ_REGEX/) {
-#        $config .= << 'DEFAULT_CONFIG'
-#
-## Location of pquery (.psql) files:
-#$QUERY_SEARCH_PATH = '/usr/local/share/pquery';
-#DEFAULT_CONFIG
-#    }
+    if ($config !~ /$main::PQ_REGEX/) {
+        $config .= << 'DEFAULT_CONFIG'
+
+# Location of pquery (.psql) files:
+$QUERY_SEARCH_PATH = '/usr/local/share/pquery';
+DEFAULT_CONFIG
+    }
     open OUT, ">$main::CONFIG_LOCAL"
         or die "Can't write $main::CONFIG_LOCAL, $!\n";
     print OUT $config;
